@@ -95,27 +95,27 @@ void checkLinking(unsigned int program) {
 // vertex shader in GLSL
 const char * vertexSource = R"(
 	#version 330
-    precision highp float;
+	precision highp float;
 
-	uniform mat4 MVP;			// Model-View-Projection matrix in row-major format
+	uniform mat4 MVP;				// Model-View-Projection matrix in row-major format
 
 	layout(location = 0) in vec2 vertexPosition;	// Attrib Array 0
-	layout(location = 1) in vec3 vertexColor;	    // Attrib Array 1
-	out vec3 color;									// output attribute
+	layout(location = 1) in vec3 vertexColor;	// Attrib Array 1
+	out vec3 color;					// output attribute
 
 	void main() {
-		color = vertexColor;														// copy color from input to output
-		gl_Position = vec4(vertexPosition.x, vertexPosition.y, 0, 1) * MVP; 		// transform to clipping space
+		color = vertexColor;			// copy color from input to output
+		gl_Position = vec4(vertexPosition.x, vertexPosition.y, 0, 1) * MVP;	// transform to clipping space
 	}
 )";
 
 // fragment shader in GLSL
 const char * fragmentSource = R"(
 	#version 330
-    precision highp float;
+	precision highp float;
 
 	in vec3 color;				// variable input: interpolated color of vertex shader
-	out vec4 fragmentColor;		// output that goes to the raster memory as told by glBindFragDataLocation
+	out vec4 fragmentColor;			// output that goes to the raster memory as told by glBindFragDataLocation
 
 	void main() {
 		fragmentColor = vec4(color, 1); // extend RGB to RGBA
@@ -179,31 +179,31 @@ public:
 	}
 
 	mat4 V() { // view matrix: translates the center to the origin
-		return mat4(1,    0, 0, 0,
+		return mat4(    1,    0, 0, 0,
 			        0,    1, 0, 0,
 			        0,    0, 1, 0,
 			     -wCx, -wCy, 0, 1);
 	}
 
 	mat4 P() { // projection matrix: scales it to be a square of edge length 2
-		return mat4(2/wWx,    0, 0, 0,
+		return mat4(2/wWx,        0, 0, 0,
 			        0,    2/wWy, 0, 0,
 			        0,        0, 1, 0,
 			        0,        0, 0, 1);
 	}
 
 	mat4 Vinv() { // inverse view matrix
-		return mat4(1,     0, 0, 0,
-				    0,     1, 0, 0,
+		return mat4(    1,     0, 0, 0,
+				0,     1, 0, 0,
 			        0,     0, 1, 0,
 			        wCx, wCy, 0, 1);
 	}
 
 	mat4 Pinv() { // inverse projection matrix
 		return mat4(wWx/2, 0,    0, 0,
-			           0, wWy/2, 0, 0,
-			           0,  0,    1, 0,
-			           0,  0,    0, 1);
+			        0, wWy/2, 0, 0,
+			        0,  0,    1, 0,
+			        0,  0,    0, 1);
 	}
 
 	void Animate(float t) {
