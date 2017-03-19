@@ -159,13 +159,51 @@ struct vec4 {
 		v[0] = x; v[1] = y; v[2] = z; v[3] = w;
 	}
 
-	vec4 operator*(const mat4& mat) {
+	vec4(const vec4 &vec) {
+		for(int i = 0; i < 4; ++i) {
+			v[i] = vec[i];
+		}
+	}
+
+	vec4 operator*(const mat4& mat) const {
 		vec4 result;
 		for (int j = 0; j < 4; j++) {
 			result.v[j] = 0;
 			for (int i = 0; i < 4; i++) result.v[j] += v[i] * mat.m[i][j];
 		}
 		return result;
+	}
+
+	float operator[](size_t index) const {
+		return v[index];
+	}
+
+	float &operator[](size_t index) {
+		return v[index];
+	}
+
+	vec4 &operator+=(const vec4 &w) {
+		for(int i = 0; i < 4; ++i) {
+			v[i] += w[i];
+		}
+		return *this;
+	}
+
+	vec4 operator+(const vec4 &w) const {
+		return (vec4(*this) += w);
+	}
+
+	vec4 &operator*=(float f) {
+		for(int i = 0; i < 4; ++i) v[i] *= f;
+		return *this;
+	}
+
+	vec4 operator*(float f) const {
+		return (vec4(*this) *= f);
+	}
+
+	friend vec4 operator*(float f, const vec4 &v) {
+		return v * f;
 	}
 };
 
@@ -414,6 +452,9 @@ void onDisplay() {
 // Key of ASCII code pressed
 void onKeyboard(unsigned char key, int pX, int pY) {
 	if (key == 'd') glutPostRedisplay();         // if d, invalidate display, i.e. redraw
+	if (key == 'q' || key == 27) {
+		glutLeaveMainLoop();
+	}
 }
 
 // Key of ASCII code released
