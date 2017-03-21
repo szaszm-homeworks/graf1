@@ -4,7 +4,7 @@ CXXFLAGS=-std=c++11
 LDFLAGS=
 
 run: grafhazi
-	LIBGL_ALWAYS_SOFTWARE=1 gdb -ex 'run;quit' ./grafhazi
+	LIBGL_ALWAYS_SOFTWARE=1 ./grafhazi
 
 all: grafhazi
 

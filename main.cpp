@@ -331,9 +331,14 @@ public:
 };
 
 class LineStrip {
+protected:
 	static const int ELEMENTS_PER_VERTEX = 5;
 	GLuint vao, vbo;        // vertex array object, vertex buffer object
 	std::vector<float> vertexData; // interleaved data of coordinates and colors
+	void CopyVertexDataToGPU() {
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		glBufferData(GL_ARRAY_BUFFER, vertexData.size() * sizeof(float), vertexData.data(), GL_DYNAMIC_DRAW);
+	}
 public:
 	LineStrip() {
 	}
@@ -353,7 +358,6 @@ public:
 	}
 
 	void AddPoint(float cX, float cY) {
-		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
 		vec4 wVertex = vec4(cX, cY, 0, 1) * camera.Pinv() * camera.Vinv();
 		// fill interleaved data
@@ -362,8 +366,7 @@ public:
 		vertexData.push_back(1); // red
 		vertexData.push_back(1); // green
 		vertexData.push_back(0); // blue
-		// copy data to the GPU
-		glBufferData(GL_ARRAY_BUFFER, vertexData.size() * sizeof(float), vertexData.data(), GL_DYNAMIC_DRAW);
+		CopyVertexDataToGPU();
 	}
 
 	void Draw() {
@@ -378,11 +381,63 @@ public:
 			glDrawArrays(GL_LINE_STRIP, 0, vertexData.size() / ELEMENTS_PER_VERTEX);
 		}
 	}
+
+	virtual ~LineStrip() {}
 };
+
+class LagrangeCurve : protected LineStrip {
+	std::vector<vec4> cps;
+	std::vector<float> ts;
+
+	float L(int i, float t) {
+		float Li = 1.0f;
+		for(int j = 0; j < cps.size(); ++j) {
+			if(j == i) continue;
+			Li *= (t - ts[j]) / (ts[i] - ts[j]);
+		}
+		return Li;
+	}
+
+	vec4 r(float t) {
+		vec4 rr(0,0,0);
+		for(int i = 0; i < cps.size(); ++i) {
+			rr += cps[i] * L(i, t);
+		}
+		return rr;
+	}
+
+	void tesselate() {
+		vertexData.clear();
+
+		for(float t = 0.0f; t <= 1.0f; t += 0.01f) {
+			vec4 point = r(t * (cps.size() - 1));
+			AddPoint(point[0], point[1]);
+		}
+
+		CopyVertexDataToGPU();
+	}
+
+public:
+	void AddControlPoint(vec4 cp) {
+		ts.push_back(cps.size());
+		cps.push_back(cp);
+		tesselate();
+	}
+
+
+	void Create() {
+		LineStrip::Create();
+	}
+
+	void Draw() {
+		LineStrip::Draw();
+	}
+};
+
 
 // The virtual world: collection of two objects
 Triangle triangle;
-LineStrip lineStrip;
+LagrangeCurve lineStrip;
 
 // Initialization, create an OpenGL context
 void onInitialization() {
@@ -464,7 +519,7 @@ void onMouse(int button, int state, int pX, int pY) {
 	if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {  // GLUT_LEFT_BUTTON / GLUT_RIGHT_BUTTON and GLUT_DOWN / GLUT_UP
 		float cX = 2.0f * pX / windowWidth - 1;	// flip y axis
 		float cY = 1.0f - 2.0f * pY / windowHeight;
-		lineStrip.AddPoint(cX, cY);
+		lineStrip.AddControlPoint(vec4(cX, cY));
 		glutPostRedisplay();     // redraw
 	}
 }
