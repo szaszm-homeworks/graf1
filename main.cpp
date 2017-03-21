@@ -60,6 +60,8 @@ const unsigned int windowWidth = 600, windowHeight = 600;
 // OpenGL major and minor versions
 int majorVersion = 3, minorVersion = 3;
 
+const float PI = 3.14156265358979f;
+
 void getErrorInfo(unsigned int handle) {
 	int logLen;
 	glGetShaderiv(handle, GL_INFO_LOG_LENGTH, &logLen);
@@ -434,18 +436,166 @@ public:
 	}
 };
 
+class BezierField {
+	constexpr static const float CONTROL_POINTS[25] = {
+		0.5f, 1.0f, 0.5f, 0.0f, 0.0f,
+		1.0f, 2.0f, 1.0f, 0.5f, 0.0f,
+		0.5f, 1.0f, 1.5f, 2.0f, 1.5f,
+		0.0f, 0.0f, 2.0f, 3.0f, 2.0f,
+		0.0f, 0.0f, 1.5f, 2.0f, 1.5f
+	};
+
+	static const int GRID_RESOLUTION = 20;
+	static const int ELEMENTS_PER_VERTEX = 5;
+
+
+	GLuint vao, vbo;
+	std::vector<vec4> cps;
+	std::vector<float> vertexData;
+
+	void CopyVertexDataToGPU() {
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		glBufferData(GL_ARRAY_BUFFER, vertexData.size() * sizeof(float), vertexData.data(), GL_STATIC_DRAW);
+	}
+
+	float B(int i, float t) {
+		int n = cps.size() - 1;
+		float choose = 1.0f;
+		for(int j = 1; j <= i; ++j) {
+			choose += static_cast<float>(n-j+1) / j;
+		}
+		return choose * pow(t, i) * pow(1 - t, n - i);
+	}
+
+	float getHeight(float x, float y) {
+		x = -1.0f * PI + 2.0f * PI * x;
+		y = -1.0f * PI + 2.0f * PI * y;
+		return 0.25f * (cos(x) + cos(y)) + 0.5f;
+	}
+
+	vec4 getColorByHeight(float height) {
+		if(height < 0.0f) height = 0.0f;
+		if(height > 1.0f) height = 1.0f;
+		return vec4(height, height, height);
+
+		float r, g, b;
+
+		if(height <= 0.25f) {
+			r = height * 4.0f;
+			g = 1.0f;
+			b = 0.66f * height;
+		} else if(height <= 0.5f) {
+			r = 1.0f;
+			g = 0.66f + 0.34f * (2.0f + height * -2.0f);
+			b = 0.66f * height;;
+		} else {
+			r = 1.0f - (height - 0.5f) * 2.0f;
+			g = r * 0.66f;
+			b = r * 0.33f;
+		}
+		return vec4(r,g,b);
+	}
+
+	void tesselate() {
+		vertexData.clear();
+		std::vector<float> tempVertexData;
+		std::vector<unsigned int> tempIndexData;
+		float step = 1.0f / (GRID_RESOLUTION - 1);
+		for(float v = 0.0f; v <= 1.0f; v += step) {
+			for(float u = 0.0f; u <= 1.0f; u += step) {
+				float height = getHeight(u, v);
+				vec4 color = getColorByHeight(height);
+				float x = u;
+				float y = v;
+				tempVertexData.push_back(x);
+				tempVertexData.push_back(y);
+				tempVertexData.push_back(color[0]); // r
+				tempVertexData.push_back(color[1]); // g
+				tempVertexData.push_back(color[2]); // b
+			}
+		}
+
+		for(int v = 0; v < GRID_RESOLUTION - 1; ++v) {
+			for(int u = 0; u < GRID_RESOLUTION - 1; ++u) {
+				tempIndexData.push_back(u + v * GRID_RESOLUTION);
+				tempIndexData.push_back(u + (v + 1) * GRID_RESOLUTION);
+				tempIndexData.push_back(u + 1 + v * GRID_RESOLUTION);
+				tempIndexData.push_back(u + (v + 1) * GRID_RESOLUTION);
+				tempIndexData.push_back(u + 1 + v * GRID_RESOLUTION);
+				tempIndexData.push_back(u + 1 + (v + 1) * GRID_RESOLUTION);
+			}
+		}
+
+		for(int index: tempIndexData) {
+			for(int i = index * ELEMENTS_PER_VERTEX; i < (index + 1) * ELEMENTS_PER_VERTEX; ++i) {
+				vertexData.push_back(tempVertexData[i]);
+			}
+		}
+		fflush(stdout);
+
+		CopyVertexDataToGPU();
+	}
+
+
+public:
+
+	void Create() {
+		glGenVertexArrays(1, &vao);
+		glBindVertexArray(vao);
+
+		glGenBuffers(1, &vbo); // Generate 1 vertex buffer object
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		// Enable the vertex attribute arrays
+		glEnableVertexAttribArray(0);  // attribute array 0
+		glEnableVertexAttribArray(1);  // attribute array 1
+		// Map attribute array 0 to the vertex data of the interleaved vbo
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, ELEMENTS_PER_VERTEX * sizeof(float), reinterpret_cast<void*>(0)); // attribute array, components/attribute, component type, normalize?, stride, offset
+		// Map attribute array 1 to the color data of the interleaved vbo
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, ELEMENTS_PER_VERTEX * sizeof(float), reinterpret_cast<void*>(2 * sizeof(float)));
+
+		tesselate();
+	}
+
+	void Draw() {
+		mat4 scale = {
+			20.0f,  0.0f,  0.0f,  0.0f,
+			 0.0f, 20.0f,  0.0f,  0.0f,
+			 0.0f,  0.0f, 20.0f,  0.0f,
+			 0.0f,  0.0f,  0.0f,  1.0f
+		};
+		mat4 translate = {
+			  1.0f,   0.0f,  0.0f,  0.0f,
+			  0.0f,   1.0f,  0.0f,  0.0f,
+			  0.0f,   0.0f,  1.0f,  0.0f,
+			-10.0f, -10.0f,  0.0f,  1.0f
+		};
+		mat4 VPTransform = scale * translate * camera.V() * camera.P();
+
+
+		int location = glGetUniformLocation(shaderProgram, "MVP");
+		if (location >= 0) glUniformMatrix4fv(location, 1, GL_TRUE, VPTransform);
+		else printf("uniform MVP cannot be set\n");
+
+		glBindVertexArray(vao);
+		glDrawArrays(GL_TRIANGLES, 0, vertexData.size() / ELEMENTS_PER_VERTEX);
+	}
+
+};
+
 
 // The virtual world: collection of two objects
-Triangle triangle;
-LagrangeCurve lineStrip;
+//Triangle triangle;
+LagrangeCurve lagrangeCurve;
+BezierField field;
 
 // Initialization, create an OpenGL context
 void onInitialization() {
 	glViewport(0, 0, windowWidth, windowHeight);
 
 	// Create objects by setting up their vertex data on the GPU
-	lineStrip.Create();
-	triangle.Create();
+	lagrangeCurve.Create();
+	//triangle.Create();
+	field.Create();
 
 	// Create vertex shader from string
 	unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
@@ -496,8 +646,9 @@ void onDisplay() {
 	glClearColor(0, 0, 0, 0);							// background color 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear the screen
 
-	triangle.Draw();
-	lineStrip.Draw();
+	//triangle.Draw();
+	field.Draw();
+	lagrangeCurve.Draw();
 	glutSwapBuffers();									// exchange the two buffers
 }
 
@@ -519,7 +670,7 @@ void onMouse(int button, int state, int pX, int pY) {
 	if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {  // GLUT_LEFT_BUTTON / GLUT_RIGHT_BUTTON and GLUT_DOWN / GLUT_UP
 		float cX = 2.0f * pX / windowWidth - 1;	// flip y axis
 		float cY = 1.0f - 2.0f * pY / windowHeight;
-		lineStrip.AddControlPoint(vec4(cX, cY));
+		lagrangeCurve.AddControlPoint(vec4(cX, cY));
 		glutPostRedisplay();     // redraw
 	}
 }
@@ -533,7 +684,7 @@ void onIdle() {
 	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
 	float sec = time / 1000.0f;				// convert msec to sec
 	camera.Animate(sec);					// animate the camera
-	triangle.Animate(sec);					// animate the triangle object
+	//triangle.Animate(sec);					// animate the triangle object
 	glutPostRedisplay();					// redraw the scene
 }
 
