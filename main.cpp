@@ -57,7 +57,7 @@ const unsigned int windowWidth = 600, windowHeight = 600;
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // You are supposed to modify the code from here...
 
-const unsigned int EPSILON = 0.01f;
+const float EPSILON = 0.01f;
 
 // OpenGL major and minor versions
 int majorVersion = 3, minorVersion = 3;
@@ -411,7 +411,7 @@ public:
 };
 
 class LagrangeCurve : protected LineStrip {
-	static const int RESOLUTION = 150;
+	static const int RESOLUTION = 50;
 	std::vector<vec4> cps;
 	std::vector<float> ts;
 	float lastAbsoluteTime = -1.0f;
@@ -439,7 +439,8 @@ class LagrangeCurve : protected LineStrip {
 		vertexData.clear();
 
 		float step = lastRelativeTime / static_cast<float>(RESOLUTION);
-		for(float t = 0.0f; t <= lastRelativeTime + EPSILON; t += step) {
+		for(unsigned i = 0; i <= RESOLUTION; ++i) {
+			float t = step * i;
 			vec4 point = r(t);
 			AddPoint(point[0], point[1]);
 		}
