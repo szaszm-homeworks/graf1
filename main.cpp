@@ -5,7 +5,7 @@
 // A beadott program csak ebben a fajlban lehet, a fajl 1 byte-os ASCII karaktereket tartalmazhat.
 // Tilos:
 // - mast "beincludolni", illetve mas konyvtarat hasznalni
-// - faljmuveleteket vegezni a printf-et kivéve
+// - faljmuveleteket vegezni a printf-et kivÃ©ve
 // - new operatort hivni a lefoglalt adat korrekt felszabaditasa nelkul
 // - felesleges programsorokat a beadott programban hagyni
 // - felesleges kommenteket a beadott programba irni a forrasmegjelolest kommentjeit kiveve
@@ -56,6 +56,8 @@ const unsigned int windowWidth = 600, windowHeight = 600;
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // You are supposed to modify the code from here...
+
+const unsigned int EPSILON = 0.01f;
 
 // OpenGL major and minor versions
 int majorVersion = 3, minorVersion = 3;
@@ -207,6 +209,28 @@ struct vec4 {
 	friend vec4 operator*(float f, const vec4 &v) {
 		return v * f;
 	}
+
+	vec4 &operator-=(const vec4 &w) {
+		return *this += -1.0f * w;
+	}
+
+	vec4 operator-(const vec4 &w) const {
+		return vec4(*this) -= w;
+	}
+
+	vec4 operator-() const {
+		return -1.0f * *this;
+	}
+
+	vec4 &operator/=(float f) {
+		if(f == 1) return *this;
+		return *this *= (1.0f / f);
+	}
+
+	vec4 operator/(float f) const {
+		if(f == 1) return *this;
+		return vec4(*this) /= f;
+	}
 };
 
 // 2D camera
@@ -246,7 +270,7 @@ public:
 			        0,  0,    0, 1);
 	}
 
-	void Animate(float t) {
+	void Animate(float /*t*/) {
 		wCx = 0; // 10 * cosf(t);
 		wCy = 0;
 		wWx = 20;
@@ -302,7 +326,7 @@ public:
 		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, NULL); // Attribute Array 1, components/attribute, component type, normalize?, tightly packed
 	}
 
-	void Animate(float t) {
+	void Animate(float /*t*/) {
 		sx = 1; // sinf(t);
 		sy = 1; // cosf(t);
 		wTx = 0; // 4 * cosf(t / 2);
@@ -361,7 +385,7 @@ public:
 
 	void AddPoint(float cX, float cY) {
 
-		vec4 wVertex = vec4(cX, cY, 0, 1) * camera.Pinv() * camera.Vinv();
+		vec4 wVertex = vec4(cX, cY, 0, 1);
 		// fill interleaved data
 		vertexData.push_back(wVertex.v[0]);
 		vertexData.push_back(wVertex.v[1]);
@@ -390,10 +414,13 @@ public:
 class LagrangeCurve : protected LineStrip {
 	std::vector<vec4> cps;
 	std::vector<float> ts;
+	float lastAbsoluteTime = -1.0f;
+	float lastRelativeTime = -1.0f;
+	float firstAbsoluteTime = -1.0f;
 
-	float L(int i, float t) {
+	float L(unsigned int i, float t) {
 		float Li = 1.0f;
-		for(int j = 0; j < cps.size(); ++j) {
+		for(unsigned int j = 0; j < cps.size(); ++j) {
 			if(j == i) continue;
 			Li *= (t - ts[j]) / (ts[i] - ts[j]);
 		}
@@ -402,7 +429,7 @@ class LagrangeCurve : protected LineStrip {
 
 	vec4 r(float t) {
 		vec4 rr(0,0,0);
-		for(int i = 0; i < cps.size(); ++i) {
+		for(unsigned int i = 0; i < cps.size(); ++i) {
 			rr += cps[i] * L(i, t);
 		}
 		return rr;
@@ -411,8 +438,10 @@ class LagrangeCurve : protected LineStrip {
 	void tesselate() {
 		vertexData.clear();
 
-		for(float t = 0.0f; t <= 1.0f; t += 0.01f) {
-			vec4 point = r(t * (cps.size() - 1));
+		printf("%f\n", lastRelativeTime);fflush(stdout);
+		for(float t = 0.0f; t <= lastRelativeTime; t += (lastRelativeTime / 5.0f)) {
+			printf("t=%f\n", t);fflush(stdout);
+			vec4 point = r(t);
 			AddPoint(point[0], point[1]);
 		}
 
@@ -421,9 +450,24 @@ class LagrangeCurve : protected LineStrip {
 
 public:
 	void AddControlPoint(vec4 cp) {
-		ts.push_back(cps.size());
+		float currentAbsoluteTime = glutGet(GLUT_ELAPSED_TIME) / 1000.0f;
+		if(fabs(lastAbsoluteTime + 1.0f) <= EPSILON) {
+			firstAbsoluteTime = lastAbsoluteTime = currentAbsoluteTime;
+			lastRelativeTime = 0.0f;
+		}
+		float timeDelta = currentAbsoluteTime - lastAbsoluteTime;
+		lastRelativeTime += timeDelta;
+		lastAbsoluteTime = currentAbsoluteTime;
+		ts.push_back(lastRelativeTime);
 		cps.push_back(cp);
-		tesselate();
+
+		printf("Control points:\n");
+		for(unsigned int i = 0; i < cps.size(); ++i) {
+			printf("cp[%d]: (%f, %f) t=%f\n", i, cps[i][0], cps[i][1], ts[i]);
+		}
+		fflush(stdout);
+
+		if(cps.size() > 1) tesselate();
 	}
 
 
@@ -433,6 +477,18 @@ public:
 
 	void Draw() {
 		LineStrip::Draw();
+	}
+
+	float getLength() const {
+		float length = 0.0f;
+		for(unsigned int i = 1; i < vertexData.size() / ELEMENTS_PER_VERTEX; ++i) {
+			float curx = vertexData[i * ELEMENTS_PER_VERTEX];
+			float cury = vertexData[i * ELEMENTS_PER_VERTEX + 1];
+			float lastx = vertexData[(i - 1) * ELEMENTS_PER_VERTEX];
+			float lasty = vertexData[(i - 1) * ELEMENTS_PER_VERTEX + 1];
+			length += sqrt(pow(curx - lastx, 2.0f) + pow(cury - lasty, 2.0f));
+		}
+		return length;
 	}
 };
 
@@ -476,7 +532,10 @@ class BezierField {
 	vec4 getColorByHeight(float height) {
 		if(height < 0.0f) height = 0.0f;
 		if(height > 1.0f) height = 1.0f;
-		return vec4(height, height, height);
+		vec4 lowcolor(0.0f, 0.4f, 0.0f);
+		vec4 hicolor(0.0f, 0.0f, 0.0f);
+		return height * hicolor + (1.0f - height) * lowcolor;
+		//return vec4(height, height, height);
 
 		float r, g, b;
 
@@ -653,7 +712,7 @@ void onDisplay() {
 }
 
 // Key of ASCII code pressed
-void onKeyboard(unsigned char key, int pX, int pY) {
+void onKeyboard(unsigned char key, int /*pX*/, int /*pY*/) {
 	if (key == 'd') glutPostRedisplay();         // if d, invalidate display, i.e. redraw
 	if (key == 'q' || key == 27) {
 		glutLeaveMainLoop();
@@ -661,7 +720,7 @@ void onKeyboard(unsigned char key, int pX, int pY) {
 }
 
 // Key of ASCII code released
-void onKeyboardUp(unsigned char key, int pX, int pY) {
+void onKeyboardUp(unsigned char /*key*/, int /*pX*/, int /*pY*/) {
 
 }
 
@@ -670,13 +729,14 @@ void onMouse(int button, int state, int pX, int pY) {
 	if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {  // GLUT_LEFT_BUTTON / GLUT_RIGHT_BUTTON and GLUT_DOWN / GLUT_UP
 		float cX = 2.0f * pX / windowWidth - 1;	// flip y axis
 		float cY = 1.0f - 2.0f * pY / windowHeight;
-		lagrangeCurve.AddControlPoint(vec4(cX, cY));
+
+		lagrangeCurve.AddControlPoint(vec4(cX, cY) * camera.Pinv() * camera.Vinv());
 		glutPostRedisplay();     // redraw
 	}
 }
 
 // Move mouse with key pressed
-void onMouseMotion(int pX, int pY) {
+void onMouseMotion(int /*pX*/, int /*pY*/) {
 }
 
 // Idle event indicating that some time elapsed: do animation here

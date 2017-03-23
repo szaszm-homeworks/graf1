@@ -1,10 +1,13 @@
 LIBS=-lGL -lGLU -lglut -lGLEW
-CFLAGS=-g -O0
+CFLAGS=-g -O0 -Wall -Wextra
 CXXFLAGS=-std=c++11
 LDFLAGS=
 
 run: grafhazi
 	LIBGL_ALWAYS_SOFTWARE=1 ./grafhazi
+
+debug: grafhazi
+	LIBGL_ALWAYS_SOFTWARE=1 gdb ./grafhazi
 
 all: grafhazi
 
