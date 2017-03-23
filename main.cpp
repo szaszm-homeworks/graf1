@@ -273,8 +273,8 @@ public:
 	void Animate(float /*t*/) {
 		wCx = 0; // 10 * cosf(t);
 		wCy = 0;
-		wWx = 20;
-		wWy = 20;
+		wWx = 2;
+		wWy = 2;
 	}
 };
 
@@ -392,7 +392,6 @@ public:
 		vertexData.push_back(1); // red
 		vertexData.push_back(1); // green
 		vertexData.push_back(0); // blue
-		CopyVertexDataToGPU();
 	}
 
 	void Draw() {
@@ -412,10 +411,11 @@ public:
 };
 
 class LagrangeCurve : protected LineStrip {
+	static const int RESOLUTION = 150;
 	std::vector<vec4> cps;
 	std::vector<float> ts;
 	float lastAbsoluteTime = -1.0f;
-	float lastRelativeTime = -1.0f;
+	float lastRelativeTime = -1.0f; // ~= lastAbsoluteTime - firstAbsoluteTime
 	float firstAbsoluteTime = -1.0f;
 
 	float L(unsigned int i, float t) {
@@ -438,9 +438,8 @@ class LagrangeCurve : protected LineStrip {
 	void tesselate() {
 		vertexData.clear();
 
-		printf("%f\n", lastRelativeTime);fflush(stdout);
-		for(float t = 0.0f; t <= lastRelativeTime; t += (lastRelativeTime / 5.0f)) {
-			printf("t=%f\n", t);fflush(stdout);
+		float step = lastRelativeTime / static_cast<float>(RESOLUTION);
+		for(float t = 0.0f; t <= lastRelativeTime + EPSILON; t += step) {
 			vec4 point = r(t);
 			AddPoint(point[0], point[1]);
 		}
@@ -460,12 +459,6 @@ public:
 		lastAbsoluteTime = currentAbsoluteTime;
 		ts.push_back(lastRelativeTime);
 		cps.push_back(cp);
-
-		printf("Control points:\n");
-		for(unsigned int i = 0; i < cps.size(); ++i) {
-			printf("cp[%d]: (%f, %f) t=%f\n", i, cps[i][0], cps[i][1], ts[i]);
-		}
-		fflush(stdout);
 
 		if(cps.size() > 1) tesselate();
 	}
@@ -617,16 +610,16 @@ public:
 
 	void Draw() {
 		mat4 scale = {
-			20.0f,  0.0f,  0.0f,  0.0f,
-			 0.0f, 20.0f,  0.0f,  0.0f,
-			 0.0f,  0.0f, 20.0f,  0.0f,
+			 2.0f,  0.0f,  0.0f,  0.0f,
+			 0.0f,  2.0f,  0.0f,  0.0f,
+			 0.0f,  0.0f,  2.0f,  0.0f,
 			 0.0f,  0.0f,  0.0f,  1.0f
 		};
 		mat4 translate = {
 			  1.0f,   0.0f,  0.0f,  0.0f,
 			  0.0f,   1.0f,  0.0f,  0.0f,
 			  0.0f,   0.0f,  1.0f,  0.0f,
-			-10.0f, -10.0f,  0.0f,  1.0f
+			 -1.0f,  -1.0f,  0.0f,  1.0f
 		};
 		mat4 VPTransform = scale * translate * camera.V() * camera.P();
 
