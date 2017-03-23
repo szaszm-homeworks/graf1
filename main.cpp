@@ -285,6 +285,7 @@ Camera camera;
 unsigned int shaderProgram;
 
 class Triangle {
+protected:
 	unsigned int vao;	// vertex array object id
 	float sx, sy;		// scaling
 	float wTx, wTy;		// translation
@@ -302,7 +303,7 @@ public:
 
 		// vertex coordinates: vbo[0] -> Attrib Array 0 -> vertexPosition of the vertex shader
 		glBindBuffer(GL_ARRAY_BUFFER, vbo[0]); // make it active, it is an array
-		static float vertexCoords[] = { -8, -8, -6, 10, 8, -2 };	// vertex data on the CPU
+		static float vertexCoords[] = { -0.08f, -0.08f, -0.06f, 0.1f, 0.08f, -0.02f };	// vertex data on the CPU
 		glBufferData(GL_ARRAY_BUFFER,      // copy to the GPU
 			         sizeof(vertexCoords), // number of the vbo in bytes
 					 vertexCoords,		   // address of the data array on the CPU
@@ -334,15 +335,15 @@ public:
 	}
 
 	void Draw() {
-		mat4 Mscale(sx, 0, 0, 0,
-			        0, sy, 0, 0,
-			        0, 0, 0, 0,
-			        0, 0, 0, 1); // model matrix
+		mat4 Mscale(sx,  0, 0, 0,
+		             0, sy, 0, 0,
+			     0,  0, 0, 0,
+			     0,  0, 0, 1); // model matrix
 
-		mat4 Mtranslate(1,   0,  0, 0,
-			            0,   1,  0, 0,
-			            0,   0,  0, 0,
-			          wTx, wTy,  0, 1); // model matrix
+		mat4 Mtranslate(  1,   0,  0, 0,
+			          0,   1,  0, 0,
+			          0,   0,  0, 0,
+			        wTx, wTy,  0, 1); // model matrix
 
 		mat4 MVPTransform = Mscale * Mtranslate * camera.V() * camera.P();
 
@@ -383,15 +384,15 @@ public:
 		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, ELEMENTS_PER_VERTEX * sizeof(float), reinterpret_cast<void*>(2 * sizeof(float)));
 	}
 
-	void AddPoint(float cX, float cY) {
+	void AddPoint(float cX, float cY, float r = 1.0f, float g = 1.0f, float b = 1.0f) {
 
 		vec4 wVertex = vec4(cX, cY, 0, 1);
 		// fill interleaved data
 		vertexData.push_back(wVertex.v[0]);
 		vertexData.push_back(wVertex.v[1]);
-		vertexData.push_back(1); // red
-		vertexData.push_back(1); // green
-		vertexData.push_back(0); // blue
+		vertexData.push_back(r); // red
+		vertexData.push_back(g); // green
+		vertexData.push_back(b); // blue
 	}
 
 	void Draw() {
@@ -427,13 +428,6 @@ class LagrangeCurve : protected LineStrip {
 		return Li;
 	}
 
-	vec4 r(float t) {
-		vec4 rr(0,0,0);
-		for(unsigned int i = 0; i < cps.size(); ++i) {
-			rr += cps[i] * L(i, t);
-		}
-		return rr;
-	}
 
 	void tesselate() {
 		vertexData.clear();
@@ -449,6 +443,16 @@ class LagrangeCurve : protected LineStrip {
 	}
 
 public:
+	vec4 r(float t) {
+		// EPSILON is needed to make a difference between the first and the last point even after fmod
+		t = fmod(t, lastRelativeTime + EPSILON);
+		vec4 rr(0,0,0);
+		for(unsigned int i = 0; i < cps.size(); ++i) {
+			rr += cps[i] * L(i, t);
+		}
+		return rr;
+	}
+
 	void AddControlPoint(vec4 cp) {
 		float currentAbsoluteTime = glutGet(GLUT_ELAPSED_TIME) / 1000.0f;
 		if(fabs(lastAbsoluteTime + 1.0f) <= EPSILON) {
@@ -635,11 +639,26 @@ public:
 
 };
 
+class Bicycle : public Triangle {
+	LagrangeCurve *curve;
+public:
+	Bicycle(LagrangeCurve *curve) :curve(curve) { }
+
+	void Animate(float t) {
+		vec4 pos = curve->r(t);
+		sx = 1; // sinf(t);
+		sy = 1; // cosf(t);
+		wTx = pos[0]; // 4 * cosf(t / 2);
+		wTy = pos[1]; // 4 * sinf(t / 2);
+	}
+};
 
 // The virtual world: collection of two objects
-//Triangle triangle;
 LagrangeCurve lagrangeCurve;
 BezierField field;
+Bicycle bicycle(&lagrangeCurve);
+
+
 
 // Initialization, create an OpenGL context
 void onInitialization() {
@@ -647,8 +666,8 @@ void onInitialization() {
 
 	// Create objects by setting up their vertex data on the GPU
 	lagrangeCurve.Create();
-	//triangle.Create();
 	field.Create();
+	bicycle.Create();
 
 	// Create vertex shader from string
 	unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
@@ -699,9 +718,9 @@ void onDisplay() {
 	glClearColor(0, 0, 0, 0);							// background color 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear the screen
 
-	//triangle.Draw();
 	field.Draw();
 	lagrangeCurve.Draw();
+	bicycle.Draw();
 	glutSwapBuffers();									// exchange the two buffers
 }
 
@@ -738,7 +757,7 @@ void onIdle() {
 	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
 	float sec = time / 1000.0f;				// convert msec to sec
 	camera.Animate(sec);					// animate the camera
-	//triangle.Animate(sec);					// animate the triangle object
+	bicycle.Animate(sec);					// animate the bicycle object
 	glutPostRedisplay();					// redraw the scene
 }
 
