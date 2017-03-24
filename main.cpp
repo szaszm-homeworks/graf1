@@ -365,7 +365,7 @@ public:
 
 class LineStrip {
 protected:
-	static const int ELEMENTS_PER_VERTEX = 5;
+	static const unsigned int ELEMENTS_PER_VERTEX = 5;
 	GLuint vao, vbo;        // vertex array object, vertex buffer object
 	std::vector<float> vertexData; // interleaved data of coordinates and colors
 	void CopyVertexDataToGPU() {
@@ -475,7 +475,6 @@ public:
 		for(unsigned int i = 0; i < cps.size(); ++i) {
 			rr += cps[i] * Lderiv(i, t);
 		}
-		printf("rr = (%f, %f %f, %f)\n", rr[0], rr[1], rr[2], rr[3]);fflush(stdout);
 		return atan2(rr[0], rr[1]);
 	}
 
@@ -532,8 +531,8 @@ class BezierField {
 		0.0f, 0.0f, 1.5f, 2.0f, 1.5f
 	};
 
-	static const int GRID_RESOLUTION = 20;
-	static const int ELEMENTS_PER_VERTEX = 5;
+	static const unsigned int GRID_RESOLUTION = 20;
+	static const unsigned int ELEMENTS_PER_VERTEX = 5;
 
 
 	GLuint vao, vbo;
@@ -613,8 +612,8 @@ class BezierField {
 			}
 		}
 
-		for(int v = 0; v < GRID_RESOLUTION - 1; ++v) {
-			for(int u = 0; u < GRID_RESOLUTION - 1; ++u) {
+		for(unsigned int v = 0; v < GRID_RESOLUTION - 1; ++v) {
+			for(unsigned int u = 0; u < GRID_RESOLUTION - 1; ++u) {
 				tempIndexData.push_back(u + v * GRID_RESOLUTION);
 				tempIndexData.push_back(u + (v + 1) * GRID_RESOLUTION);
 				tempIndexData.push_back(u + 1 + v * GRID_RESOLUTION);
@@ -624,8 +623,8 @@ class BezierField {
 			}
 		}
 
-		for(int index: tempIndexData) {
-			for(int i = index * ELEMENTS_PER_VERTEX; i < (index + 1) * ELEMENTS_PER_VERTEX; ++i) {
+		for(unsigned int index: tempIndexData) {
+			for(unsigned int i = index * ELEMENTS_PER_VERTEX; i < (index + 1) * ELEMENTS_PER_VERTEX; ++i) {
 				vertexData.push_back(tempVertexData[i]);
 			}
 		}
@@ -680,18 +679,96 @@ public:
 
 };
 
-class Bicycle : public Triangle {
+class Bicycle {
+	static const unsigned int ELEMENTS_PER_VERTEX = 5;
 	LagrangeCurve *curve;
+	float vertexData[ELEMENTS_PER_VERTEX * 4];
+	GLuint vao, vbo;
+	float translation[2];
+	float rotation;
+
 public:
-	Bicycle(LagrangeCurve *curve) :curve(curve) { }
+	Bicycle(LagrangeCurve *curve) 
+		:curve(curve), translation{0.0f, 0.0f}, rotation(0.0f)
+	{ }
+
+	void Create() {
+		glGenVertexArrays(1, &vao);
+		glBindVertexArray(vao);
+
+		glGenBuffers(1, &vbo); // Generate 1 vertex buffer object
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		// Enable the vertex attribute arrays
+		glEnableVertexAttribArray(0);  // attribute array 0
+		glEnableVertexAttribArray(1);  // attribute array 1
+		// Map attribute array 0 to the vertex data of the interleaved vbo
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, ELEMENTS_PER_VERTEX * sizeof(float), reinterpret_cast<void*>(0)); // attribute array, components/attribute, component type, normalize?, stride, offset
+		// Map attribute array 1 to the color data of the interleaved vbo
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, ELEMENTS_PER_VERTEX * sizeof(float), reinterpret_cast<void*>(2 * sizeof(float)));
+
+		vertexData[0]  = -1.0f; // x
+		vertexData[1]  = -1.0f; // y
+		vertexData[2]  =  1.0f; // r
+		vertexData[3]  =  0.0f; // g
+		vertexData[4]  =  1.0f; // b
+
+		vertexData[5]  =  0.0f;
+		vertexData[6]  =  1.0f;
+		vertexData[7]  =  0.0f;
+		vertexData[8]  =  1.0f;
+		vertexData[9]  =  1.0f;
+
+		vertexData[10] =  0.0f;
+		vertexData[11] =  0.0f;
+		vertexData[12] =  0.0f;
+		vertexData[13] =  0.0f;
+		vertexData[14] =  1.0f;
+
+		vertexData[15] =  1.0f;
+		vertexData[16] = -1.0f;
+		vertexData[17] =  1.0f;
+		vertexData[18] =  0.0f;
+		vertexData[19] =  1.0f;
+
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		glBufferData(GL_ARRAY_BUFFER, 20 * sizeof(float), vertexData, GL_STATIC_DRAW);
+	}
 
 	void Animate(float t) {
 		vec4 pos = curve->r(t);
-		sx = 1; // sinf(t);
-		sy = 1; // cosf(t);
-		wTx = pos[0]; // 4 * cosf(t / 2);
-		wTy = pos[1]; // 4 * sinf(t / 2);
+		translation[0] = pos[0]; // 4 * cosf(t / 2);
+		translation[1] = pos[1]; // 4 * sinf(t / 2);
 		rotation = curve->direction(t);
+	}
+
+	void Draw() {
+		using std::sin;
+		using std::cos;
+		float scale = 0.1f;
+
+		mat4 Mscale( scale,  0.0f,  0.0f, 0.0f,
+		              0.0f, scale,  0.0f, 0.0f,
+			      0.0f,  0.0f, scale, 0.0f,
+			      0.0f,  0.0f,  0.0f, 1.0f);
+
+		mat4 Mtranslate(          1.0f,           0.0f, 0.0f, 0.0f,
+				          0.0f,           1.0f, 0.0f, 0.0f,
+				          0.0f,           0.0f, 1.0f, 0.0f,
+		                translation[0], translation[1], 0.0f, 1.0f);
+
+		mat4 Mrotate( cos(rotation), -sin(rotation), 0.0f, 0.0f,
+			      sin(rotation),  cos(rotation), 0.0f, 0.0f,
+				       0.0f,           0.0f, 1.0f, 0.0f,
+				       0.0f,           0.0f, 0.0f, 1.0f);
+
+		mat4 VPTransform = Mscale * Mrotate * Mtranslate * camera.V() * camera.P();
+
+		int location = glGetUniformLocation(shaderProgram, "MVP");
+		if (location >= 0) glUniformMatrix4fv(location, 1, GL_TRUE, VPTransform);
+		else printf("uniform MVP cannot be set\n");
+
+		glBindVertexArray(vao);
+		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 	}
 };
 
