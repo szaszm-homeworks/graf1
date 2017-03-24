@@ -147,6 +147,12 @@ public:
 		     m30, m31, m32, m33 }
 	{ }
 
+	mat4(const mat4 &m) :mat4(m[0][0], m[0][1], m[0][2], m[0][3],
+	                          m[1][0], m[1][1], m[1][2], m[1][3],
+				  m[2][0], m[2][1], m[2][2], m[2][3],
+				  m[3][0], m[3][1], m[3][2], m[3][3])
+	{ }
+
 	mat4 operator*(const mat4& right) const {
 		mat4 result;
 		for (int i = 0; i < 4; i++) {
@@ -160,6 +166,9 @@ public:
 
 	operator float*() { return &m[0][0]; }
 	operator const float*() const { return &m[0][0]; }
+
+	float *operator[](unsigned int i) { return &m[i][0]; }
+	const float *operator[](unsigned int i) const { return &m[i][0]; }
 };
 
 
@@ -265,6 +274,8 @@ public:
 		Animate(0);
 	}
 
+	Camera(const Camera &) = delete;
+
 	mat4 V() const { // view matrix: translates the center to the origin
 		return mat4(    1,    0, 0, 0,
 			        0,    1, 0, 0,
@@ -317,6 +328,8 @@ public:
 	Triangle() {
 		Animate(0);
 	}
+
+	Triangle(const Triangle &) = delete;
 
 	void Create() {
 		glGenVertexArrays(1, &vao);	// create 1 vertex array object
@@ -397,8 +410,9 @@ protected:
 		glBufferData(GL_ARRAY_BUFFER, vertexData.size() * sizeof(float), vertexData.data(), GL_DYNAMIC_DRAW);
 	}
 public:
-	LineStrip() {
-	}
+	LineStrip() = default;
+	LineStrip(const LineStrip &) = delete;
+
 	void Create() {
 		glGenVertexArrays(1, &vao);
 		glBindVertexArray(vao);
@@ -737,20 +751,24 @@ public:
 		return dotproduct;
 	}
 };
+
 constexpr const float BezierField::CONTROL_POINTS[25];
+
+
 
 class Bicycle {
 	static const unsigned int ELEMENTS_PER_VERTEX = 5;
-	LagrangeCurve *curve;
-	BezierField *field;
+	const LagrangeCurve *curve;
+	const BezierField *field;
 	float vertexData[ELEMENTS_PER_VERTEX * 4];
 	GLuint vao, vbo;
 	float translation[2];
 	float rotation;
 	float sy;
+	float verticalAngle;
 public:
-	Bicycle(LagrangeCurve *curve, BezierField *field) 
-		:curve(curve), field(field), translation{0.0f, 0.0f}, rotation(0.0f), sy(0)
+	Bicycle(const LagrangeCurve *curve, const BezierField *field) 
+		:curve(curve), field(field), translation { 0.0f, 0.0f }
 	{ }
 
 	void Create() {
@@ -801,7 +819,8 @@ public:
 		translation[1] = pos[1]; // 4 * sinf(t / 2);
 		vec4 direction = curve->direction(t);
 		this->rotation = atan2(direction[0], direction[1]);;
-		sy = sin(atan(field->getDirectionalDerivative(pos, direction)) + PI / 2.0f);
+		verticalAngle = atan(field->getDirectionalDerivative(pos, direction));
+		sy = sin(verticalAngle + PI / 2.0f);
 	}
 
 	void Draw() const {
@@ -833,13 +852,116 @@ public:
 		glBindVertexArray(vao);
 		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 	}
+
+	float getVerticalAngle() const {
+		return verticalAngle;
+	}
 };
+
+class DerivativeTriangle {
+	static const unsigned int ELEMENTS_PER_VERTEX = 5;
+
+	GLuint vao, vbo;
+	float vertexData[ELEMENTS_PER_VERTEX * 3];
+	const Bicycle *bicycle;
+	float verticalAngle;
+
+public:
+	explicit DerivativeTriangle(const Bicycle *bicycle) 
+		:bicycle(bicycle)
+	{ }
+
+	void Create() {
+		glGenVertexArrays(1, &vao);
+		glBindVertexArray(vao);
+
+		glGenBuffers(1, &vbo); // Generate 1 vertex buffer object
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		// Enable the vertex attribute arrays
+		glEnableVertexAttribArray(0);  // attribute array 0
+		glEnableVertexAttribArray(1);  // attribute array 1
+		// Map attribute array 0 to the vertex data of the interleaved vbo
+		glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, ELEMENTS_PER_VERTEX * sizeof(float), reinterpret_cast<void*>(0)); // attribute array, components/attribute, component type, normalize?, stride, offset
+		// Map attribute array 1 to the color data of the interleaved vbo
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, ELEMENTS_PER_VERTEX * sizeof(float), reinterpret_cast<void*>(2 * sizeof(float)));
+	}
+
+	void Animate() {
+		verticalAngle = bicycle->getVerticalAngle();
+	}
+
+	void Draw() {
+		if(verticalAngle < 0) {
+			vertexData[0] = 0.0f; // x
+			vertexData[1] = 0.0f; // y
+			vertexData[2] = 0.0f; // r
+			vertexData[3] = 1.0f; // g
+			vertexData[4] = 1.0f; // b
+
+			vertexData[5] = 0.0f; // x
+			vertexData[6] = 1.0f; // y
+			vertexData[7] = 0.0f; // r
+			vertexData[8] = 1.0f; // g
+			vertexData[9] = 1.0f; // b
+
+			vertexData[10] = 1.0f; // x
+			vertexData[11] = 0.0f; // y
+			vertexData[12] = 0.0f; // r
+			vertexData[13] = 1.0f; // g
+			vertexData[14] = 1.0f; // b
+		} else {
+			vertexData[0] = 0.0f; // x
+			vertexData[1] = 0.0f; // y
+			vertexData[2] = 0.0f; // r
+			vertexData[3] = 1.0f; // g
+			vertexData[4] = 1.0f; // b
+
+			vertexData[5] = 1.0f; // x
+			vertexData[6] = 1.0f; // y
+			vertexData[7] = 0.0f; // r
+			vertexData[8] = 1.0f; // g
+			vertexData[9] = 1.0f; // b
+
+			vertexData[10] = 1.0f; // x
+			vertexData[11] = 0.0f; // y
+			vertexData[12] = 0.0f; // r
+			vertexData[13] = 1.0f; // g
+			vertexData[14] = 1.0f; // b
+		}
+
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		glBufferData(GL_ARRAY_BUFFER, 15 * sizeof(float), vertexData, GL_DYNAMIC_DRAW);
+
+		mat4 scale = {
+			 0.1f,  0.0f,  0.0f,  0.0f,
+			 0.0f,  0.1f,  0.0f,  0.0f,
+			 0.0f,  0.0f,  0.1f,  0.0f,
+			 0.0f,  0.0f,  0.0f,  1.0f
+		};
+		mat4 translate = {
+			  1.0f,   0.0f,  0.0f,  0.0f,
+			  0.0f,   1.0f,  0.0f,  0.0f,
+			  0.0f,   0.0f,  1.0f,  0.0f,
+			  0.7f,  -0.8f,  0.0f,  1.0f
+		};
+		mat4 VPTransform = scale * translate * camera.V() * camera.P();
+
+
+		int location = glGetUniformLocation(shaderProgram, "MVP");
+		if (location >= 0) glUniformMatrix4fv(location, 1, GL_TRUE, VPTransform);
+		else printf("uniform MVP cannot be set\n");
+
+		glBindVertexArray(vao);
+		glDrawArrays(GL_TRIANGLES, 0, 3);
+	}
+};
+
 
 // The virtual world: collection of two objects
 LagrangeCurve lagrangeCurve;
 BezierField field;
 Bicycle bicycle(&lagrangeCurve, &field);
-
+DerivativeTriangle dTriangle(&bicycle);
 
 
 // Initialization, create an OpenGL context
@@ -850,6 +972,7 @@ void onInitialization() {
 	lagrangeCurve.Create();
 	field.Create();
 	bicycle.Create();
+	dTriangle.Create();
 
 	// Create vertex shader from string
 	unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
@@ -903,6 +1026,7 @@ void onDisplay() {
 	field.Draw();
 	lagrangeCurve.Draw();
 	bicycle.Draw();
+	dTriangle.Draw();
 	glutSwapBuffers();									// exchange the two buffers
 }
 
@@ -940,6 +1064,7 @@ void onIdle() {
 	float sec = time / 1000.0f;				// convert msec to sec
 	camera.Animate(sec);					// animate the camera
 	bicycle.Animate(sec);					// animate the bicycle object
+	dTriangle.Animate();
 	glutPostRedisplay();					// redraw the scene
 }
 
