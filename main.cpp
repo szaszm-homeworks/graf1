@@ -289,6 +289,7 @@ protected:
 	unsigned int vao;	// vertex array object id
 	float sx, sy;		// scaling
 	float wTx, wTy;		// translation
+	float rotation;		// rotation
 public:
 	Triangle() {
 		Animate(0);
@@ -340,12 +341,17 @@ public:
 			     0,  0, 0, 0,
 			     0,  0, 0, 1); // model matrix
 
+		mat4 Mrotate(   cos(rotation), -sin(rotation), 0, 0,
+				sin(rotation),  cos(rotation), 0, 0,
+				            0,              0, 1, 0,
+					    0,              0, 0, 1);
+
 		mat4 Mtranslate(  1,   0,  0, 0,
 			          0,   1,  0, 0,
 			          0,   0,  0, 0,
 			        wTx, wTy,  0, 1); // model matrix
 
-		mat4 MVPTransform = Mscale * Mtranslate * camera.V() * camera.P();
+		mat4 MVPTransform = Mscale * Mrotate * Mtranslate * camera.V() * camera.P();
 
 		// set GPU uniform matrix variable MVP with the content of CPU variable MVPTransform
 		int location = glGetUniformLocation(shaderProgram, "MVP");
@@ -428,6 +434,15 @@ class LagrangeCurve : protected LineStrip {
 		return Li;
 	}
 
+	float Lderiv(unsigned int i, float t) {
+		float sum = 0.0f;
+		for(unsigned int j = 0; j < cps.size(); ++j) {
+			if(j == i) continue;
+			sum += 1.0f / (t - ts[j]);
+		}
+		return sum * L(i, t);
+	}
+
 
 	void tesselate() {
 		vertexData.clear();
@@ -445,12 +460,23 @@ class LagrangeCurve : protected LineStrip {
 public:
 	vec4 r(float t) {
 		// EPSILON is needed to make a difference between the first and the last point even after fmod
+		// EPSILON is a very small positive number
 		t = fmod(t, lastRelativeTime + EPSILON);
 		vec4 rr(0,0,0);
 		for(unsigned int i = 0; i < cps.size(); ++i) {
 			rr += cps[i] * L(i, t);
 		}
 		return rr;
+	}
+
+	float direction(float t) {
+		t = fmod(t, lastRelativeTime + EPSILON);
+		vec4 rr(0,0,0);
+		for(unsigned int i = 0; i < cps.size(); ++i) {
+			rr += cps[i] * Lderiv(i, t);
+		}
+		printf("rr = (%f, %f %f, %f)\n", rr[0], rr[1], rr[2], rr[3]);fflush(stdout);
+		return atan2(rr[0], rr[1]);
 	}
 
 	void AddControlPoint(vec4 cp) {
@@ -475,6 +501,13 @@ public:
 
 	void Draw() {
 		LineStrip::Draw();
+	}
+
+	void Animate(float t) {
+		if(fmod(t, 1.0f) < EPSILON) {
+			printf("LagrangeCurve length: %f\n", getLength());
+			fflush(stdout);
+		}
 	}
 
 	float getLength() const {
@@ -530,9 +563,17 @@ class BezierField {
 	vec4 getColorByHeight(float height) {
 		if(height < 0.0f) height = 0.0f;
 		if(height > 1.0f) height = 1.0f;
-		vec4 lowcolor(0.0f, 0.4f, 0.0f);
-		vec4 hicolor(0.0f, 0.0f, 0.0f);
-		return height * hicolor + (1.0f - height) * lowcolor;
+		vec4 lowcolor(0.2f, 0.6f, 0.0f);
+		vec4 midcolor(0.9f, 0.65f, 0.0f);
+		vec4 hicolor(0.03f, 0.02f, 0.00f);
+		if(height <= 0.5f) {
+			height *= 2.0f;
+			return height * midcolor + (1.0f - height) * lowcolor;
+		} else {
+			height -= 0.5f;
+			height *= 2.0f;
+			return height * hicolor + (1.0f - height) * midcolor;
+		}
 		//return vec4(height, height, height);
 
 		float r, g, b;
@@ -650,6 +691,7 @@ public:
 		sy = 1; // cosf(t);
 		wTx = pos[0]; // 4 * cosf(t / 2);
 		wTy = pos[1]; // 4 * sinf(t / 2);
+		rotation = curve->direction(t);
 	}
 };
 
@@ -756,6 +798,7 @@ void onMouseMotion(int /*pX*/, int /*pY*/) {
 void onIdle() {
 	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
 	float sec = time / 1000.0f;				// convert msec to sec
+	lagrangeCurve.Animate(sec);
 	camera.Animate(sec);					// animate the camera
 	bicycle.Animate(sec);					// animate the bicycle object
 	glutPostRedisplay();					// redraw the scene
