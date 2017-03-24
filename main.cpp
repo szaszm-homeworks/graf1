@@ -491,6 +491,9 @@ public:
 		cps.push_back(cp);
 
 		if(cps.size() > 1) tesselate();
+
+		printf("LagrangeCurve length: %f\n", getLength());
+		fflush(stdout);
 	}
 
 
@@ -500,13 +503,6 @@ public:
 
 	void Draw() {
 		LineStrip::Draw();
-	}
-
-	void Animate(float t) {
-		if(fmod(t, 1.0f) < EPSILON) {
-			printf("LagrangeCurve length: %f\n", getLength());
-			fflush(stdout);
-		}
 	}
 
 	float getLength() const {
@@ -597,9 +593,11 @@ class BezierField {
 		vertexData.clear();
 		std::vector<float> tempVertexData;
 		std::vector<unsigned int> tempIndexData;
-		float step = 1.0f / (GRID_RESOLUTION - 1);
-		for(float v = 0.0f; v <= 1.0f; v += step) {
-			for(float u = 0.0f; u <= 1.0f; u += step) {
+		float step = 1.0f / GRID_RESOLUTION;
+		for(unsigned int i = 0; i <= GRID_RESOLUTION; ++i) {
+			for(unsigned int j = 0; j <= GRID_RESOLUTION; ++j) {
+				float v = i * step;
+				float u = j * step;
 				float height = getHeight(u, v);
 				vec4 color = getColorByHeight(height);
 				float x = u;
@@ -612,14 +610,14 @@ class BezierField {
 			}
 		}
 
-		for(unsigned int v = 0; v < GRID_RESOLUTION - 1; ++v) {
-			for(unsigned int u = 0; u < GRID_RESOLUTION - 1; ++u) {
-				tempIndexData.push_back(u + v * GRID_RESOLUTION);
-				tempIndexData.push_back(u + (v + 1) * GRID_RESOLUTION);
-				tempIndexData.push_back(u + 1 + v * GRID_RESOLUTION);
-				tempIndexData.push_back(u + (v + 1) * GRID_RESOLUTION);
-				tempIndexData.push_back(u + 1 + v * GRID_RESOLUTION);
-				tempIndexData.push_back(u + 1 + (v + 1) * GRID_RESOLUTION);
+		for(unsigned int v = 0; v < GRID_RESOLUTION; ++v) {
+			for(unsigned int u = 0; u < GRID_RESOLUTION; ++u) {
+				tempIndexData.push_back(u + v * (GRID_RESOLUTION + 1));
+				tempIndexData.push_back(u + (v + 1) * (GRID_RESOLUTION + 1));
+				tempIndexData.push_back(u + 1 + v * (GRID_RESOLUTION + 1));
+				tempIndexData.push_back(u + (v + 1) * (GRID_RESOLUTION + 1));
+				tempIndexData.push_back(u + 1 + v * (GRID_RESOLUTION + 1));
+				tempIndexData.push_back(u + 1 + (v + 1) * (GRID_RESOLUTION + 1));
 			}
 		}
 
@@ -875,7 +873,6 @@ void onMouseMotion(int /*pX*/, int /*pY*/) {
 void onIdle() {
 	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
 	float sec = time / 1000.0f;				// convert msec to sec
-	lagrangeCurve.Animate(sec);
 	camera.Animate(sec);					// animate the camera
 	bicycle.Animate(sec);					// animate the bicycle object
 	glutPostRedisplay();					// redraw the scene
