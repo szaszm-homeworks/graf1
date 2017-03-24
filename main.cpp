@@ -130,18 +130,24 @@ const char * fragmentSource = R"(
 struct mat4 {
 	float m[4][4];
 public:
-	mat4() {}
-	mat4(float m00, float m01, float m02, float m03,
-		float m10, float m11, float m12, float m13,
-		float m20, float m21, float m22, float m23,
-		float m30, float m31, float m32, float m33) {
-		m[0][0] = m00; m[0][1] = m01; m[0][2] = m02; m[0][3] = m03;
-		m[1][0] = m10; m[1][1] = m11; m[1][2] = m12; m[1][3] = m13;
-		m[2][0] = m20; m[2][1] = m21; m[2][2] = m22; m[2][3] = m23;
-		m[3][0] = m30; m[3][1] = m31; m[3][2] = m32; m[3][3] = m33;
-	}
+	constexpr mat4()
+		:mat4(1.0f, 0.0f, 0.0f, 0.0f,
+		      0.0f, 1.0f, 0.0f, 0.0f,
+		      0.0f, 0.0f, 1.0f, 0.0f,
+		      0.0f, 0.0f, 0.0f, 1.0f)
+	{ }
 
-	mat4 operator*(const mat4& right) {
+	constexpr mat4(float m00, float m01, float m02, float m03,
+	               float m10, float m11, float m12, float m13,
+	               float m20, float m21, float m22, float m23,
+	               float m30, float m31, float m32, float m33) 
+		:m { m00, m01, m02, m03,
+		     m10, m11, m12, m13,
+		     m20, m21, m22, m23,
+		     m30, m31, m32, m33 }
+	{ }
+
+	mat4 operator*(const mat4& right) const {
 		mat4 result;
 		for (int i = 0; i < 4; i++) {
 			for (int j = 0; j < 4; j++) {
@@ -418,7 +424,7 @@ public:
 };
 
 class LagrangeCurve : protected LineStrip {
-	static const int RESOLUTION = 50;
+	static const int RESOLUTION = 100;
 	std::vector<vec4> cps;
 	std::vector<float> ts;
 	float lastAbsoluteTime = -1.0f;
@@ -518,6 +524,7 @@ public:
 	}
 };
 
+
 class BezierField {
 	constexpr static const float CONTROL_POINTS[25] = {
 		0.5f, 1.0f, 0.5f, 0.0f, 0.0f,
@@ -526,6 +533,7 @@ class BezierField {
 		0.0f, 0.0f, 2.0f, 3.0f, 2.0f,
 		0.0f, 0.0f, 1.5f, 2.0f, 1.5f
 	};
+	static const unsigned int CONTROL_POINTS_WIDTH = 4;
 
 	static const unsigned int GRID_RESOLUTION = 20;
 	static const unsigned int ELEMENTS_PER_VERTEX = 5;
@@ -541,7 +549,7 @@ class BezierField {
 	}
 
 	float B(int i, float t) {
-		int n = cps.size() - 1;
+		int n = CONTROL_POINTS_WIDTH + 1;
 		float choose = 1.0f;
 		for(int j = 1; j <= i; ++j) {
 			choose += static_cast<float>(n-j+1) / j;
@@ -550,14 +558,24 @@ class BezierField {
 	}
 
 	float getHeight(float x, float y) {
+		float height = 0.0f;
+		for(unsigned int v = 0; v <= CONTROL_POINTS_WIDTH; ++v) {
+			for(unsigned int u = 0; u <= CONTROL_POINTS_WIDTH; ++u) {
+				height += B(u, x) * B(v, y) * CONTROL_POINTS[v * (CONTROL_POINTS_WIDTH + 1) + u];
+			}
+		}
+		return height;
+
+
 		x = -1.0f * PI + 2.0f * PI * x;
 		y = -1.0f * PI + 2.0f * PI * y;
 		return 0.25f * (cos(x) + cos(y)) + 0.5f;
 	}
 
-	vec4 getColorByHeight(float height) {
+	vec4 getColorByLevel(float height) {
 		if(height < 0.0f) height = 0.0f;
 		if(height > 1.0f) height = 1.0f;
+		//return vec4(height, height, height);
 		vec4 lowcolor(0.2f, 0.6f, 0.0f);
 		vec4 midcolor(0.9f, 0.65f, 0.0f);
 		vec4 hicolor(0.03f, 0.02f, 0.00f);
@@ -569,7 +587,6 @@ class BezierField {
 			height *= 2.0f;
 			return height * hicolor + (1.0f - height) * midcolor;
 		}
-		//return vec4(height, height, height);
 
 		float r, g, b;
 
@@ -599,7 +616,7 @@ class BezierField {
 				float v = i * step;
 				float u = j * step;
 				float height = getHeight(u, v);
-				vec4 color = getColorByHeight(height);
+				vec4 color = getColorByLevel(height / 1.5f);
 				float x = u;
 				float y = v;
 				tempVertexData.push_back(x);
@@ -676,6 +693,7 @@ public:
 	}
 
 };
+constexpr const float BezierField::CONTROL_POINTS[25];
 
 class Bicycle {
 	static const unsigned int ELEMENTS_PER_VERTEX = 5;
@@ -742,22 +760,22 @@ public:
 	void Draw() {
 		using std::sin;
 		using std::cos;
-		float scale = 0.1f;
+		constexpr float scale = 0.1f;
 
-		mat4 Mscale( scale,  0.0f,  0.0f, 0.0f,
-		              0.0f, scale,  0.0f, 0.0f,
-			      0.0f,  0.0f, scale, 0.0f,
-			      0.0f,  0.0f,  0.0f, 1.0f);
+		constexpr mat4 Mscale( scale,  0.0f,  0.0f, 0.0f,
+		                        0.0f, scale,  0.0f, 0.0f,
+		                        0.0f,  0.0f, scale, 0.0f,
+		                        0.0f,  0.0f,  0.0f, 1.0f);
 
 		mat4 Mtranslate(          1.0f,           0.0f, 0.0f, 0.0f,
-				          0.0f,           1.0f, 0.0f, 0.0f,
-				          0.0f,           0.0f, 1.0f, 0.0f,
+		                          0.0f,           1.0f, 0.0f, 0.0f,
+		                          0.0f,           0.0f, 1.0f, 0.0f,
 		                translation[0], translation[1], 0.0f, 1.0f);
 
 		mat4 Mrotate( cos(rotation), -sin(rotation), 0.0f, 0.0f,
-			      sin(rotation),  cos(rotation), 0.0f, 0.0f,
-				       0.0f,           0.0f, 1.0f, 0.0f,
-				       0.0f,           0.0f, 0.0f, 1.0f);
+		              sin(rotation),  cos(rotation), 0.0f, 0.0f,
+		                       0.0f,           0.0f, 1.0f, 0.0f,
+		                       0.0f,           0.0f, 0.0f, 1.0f);
 
 		mat4 VPTransform = Mscale * Mrotate * Mtranslate * camera.V() * camera.P();
 
