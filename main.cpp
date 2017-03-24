@@ -167,7 +167,7 @@ public:
 struct vec4 {
 	float v[4];
 
-	vec4(float x = 0, float y = 0, float z = 0, float w = 1) {
+	explicit vec4(float x = 0, float y = 0, float z = 0, float w = 1) {
 		v[0] = x; v[1] = y; v[2] = z; v[3] = w;
 	}
 
@@ -493,13 +493,14 @@ public:
 		return rr;
 	}
 
-	float direction(float t) const {
+	vec4 direction(float t) const {
+		if(lastRelativeTime == -1) return vec4();
 		t = fmod(t, lastRelativeTime + EPSILON);
 		vec4 rr(0,0,0);
 		for(unsigned int i = 0; i < cps.size(); ++i) {
 			rr += cps[i] * Lderiv(i, t);
 		}
-		return atan2(rr[0], rr[1]);
+		return rr;
 	}
 
 	void AddControlPoint(vec4 cp) {
@@ -516,7 +517,7 @@ public:
 
 		if(cps.size() > 1) tesselate();
 
-		printf("LagrangeCurve length: %f\n", getLength());
+		printf("LagrangeCurve length: %f km\n", getLength() / 2.0f);
 		fflush(stdout);
 	}
 
@@ -583,7 +584,7 @@ class BezierField {
 	float Bderiv(int i, float t) const {
 		int n = CONTROL_POINTS_WIDTH + 1;
 		float BBinom = getBBinom(i);
-		return BBinom * (i * pow(t, i - 1) * pow(1 - t, n - i) + pow(t, i) * (n - i) + pow(1 - t, n - i - 1));
+		return BBinom * (pow(t, i - 1) * pow(1 - t, n - i) * i - pow(t, i) * (n - i) * pow(1 - t, n - i - 1));
 	}
 
 	float getHeight(float x, float y) const {
@@ -729,7 +730,11 @@ public:
 	}
 
 	float getDirectionalDerivative(vec4 position, vec4 direction) const {
-		return fabs(atan(dot(getGradient(position[0], position[1]), direction)) / 2 + PI / 2);
+		position /= 2.0f;
+		position += vec4(0.5f, 0.5f);
+		vec4 grad = getGradient(position[0], position[1]);
+		float dotproduct = dot(grad, direction);
+		return dotproduct;
 	}
 };
 constexpr const float BezierField::CONTROL_POINTS[25];
@@ -794,9 +799,9 @@ public:
 		vec4 pos = curve->r(t);
 		translation[0] = pos[0]; // 4 * cosf(t / 2);
 		translation[1] = pos[1]; // 4 * sinf(t / 2);
-		float rotation = curve->direction(t);
-		this->rotation = rotation;
-		sy = 1.0f / field->getDirectionalDerivative(pos, rotation);
+		vec4 direction = curve->direction(t);
+		this->rotation = atan2(direction[0], direction[1]);;
+		sy = sin(atan(field->getDirectionalDerivative(pos, direction)) + PI / 2.0f);
 	}
 
 	void Draw() const {
