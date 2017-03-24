@@ -157,7 +157,9 @@ public:
 		}
 		return result;
 	}
+
 	operator float*() { return &m[0][0]; }
+	operator const float*() const { return &m[0][0]; }
 };
 
 
@@ -237,7 +239,22 @@ struct vec4 {
 		if(f == 1) return *this;
 		return vec4(*this) /= f;
 	}
+
 };
+
+float dot(const vec4 &v, const vec4 &w) {
+	float sum = 0.0f;
+
+	if(fabs(v[3] - 1.0f) > EPSILON || fabs(w[3] - 1.0f) > EPSILON) {
+		return -1.0f;
+	}
+
+	for(int i = 0; i < 3; ++i) {
+		sum += v[i] * w[i];
+	}
+
+	return sum;
+}
 
 // 2D camera
 struct Camera {
@@ -248,28 +265,28 @@ public:
 		Animate(0);
 	}
 
-	mat4 V() { // view matrix: translates the center to the origin
+	mat4 V() const { // view matrix: translates the center to the origin
 		return mat4(    1,    0, 0, 0,
 			        0,    1, 0, 0,
 			        0,    0, 1, 0,
 			     -wCx, -wCy, 0, 1);
 	}
 
-	mat4 P() { // projection matrix: scales it to be a square of edge length 2
+	mat4 P() const { // projection matrix: scales it to be a square of edge length 2
 		return mat4(2/wWx,        0, 0, 0,
 			        0,    2/wWy, 0, 0,
 			        0,        0, 1, 0,
 			        0,        0, 0, 1);
 	}
 
-	mat4 Vinv() { // inverse view matrix
+	mat4 Vinv() const { // inverse view matrix
 		return mat4(    1,     0, 0, 0,
 				0,     1, 0, 0,
 			        0,     0, 1, 0,
 			        wCx, wCy, 0, 1);
 	}
 
-	mat4 Pinv() { // inverse projection matrix
+	mat4 Pinv() const { // inverse projection matrix
 		return mat4(wWx/2, 0,    0, 0,
 			        0, wWy/2, 0, 0,
 			        0,  0,    1, 0,
@@ -341,7 +358,7 @@ public:
 		wTy = 0; // 4 * sinf(t / 2);
 	}
 
-	void Draw() {
+	void Draw() const {
 		mat4 Mscale(sx,  0, 0, 0,
 		             0, sy, 0, 0,
 			     0,  0, 0, 0,
@@ -374,7 +391,8 @@ protected:
 	static const unsigned int ELEMENTS_PER_VERTEX = 5;
 	GLuint vao, vbo;        // vertex array object, vertex buffer object
 	std::vector<float> vertexData; // interleaved data of coordinates and colors
-	void CopyVertexDataToGPU() {
+
+	void CopyVertexDataToGPU() const {
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 		glBufferData(GL_ARRAY_BUFFER, vertexData.size() * sizeof(float), vertexData.data(), GL_DYNAMIC_DRAW);
 	}
@@ -407,7 +425,7 @@ public:
 		vertexData.push_back(b); // blue
 	}
 
-	void Draw() {
+	void Draw() const {
 		if (vertexData.size() > 0) {
 			mat4 VPTransform = camera.V() * camera.P();
 
@@ -431,7 +449,7 @@ class LagrangeCurve : protected LineStrip {
 	float lastRelativeTime = -1.0f; // ~= lastAbsoluteTime - firstAbsoluteTime
 	float firstAbsoluteTime = -1.0f;
 
-	float L(unsigned int i, float t) {
+	float L(unsigned int i, float t) const {
 		float Li = 1.0f;
 		for(unsigned int j = 0; j < cps.size(); ++j) {
 			if(j == i) continue;
@@ -440,7 +458,7 @@ class LagrangeCurve : protected LineStrip {
 		return Li;
 	}
 
-	float Lderiv(unsigned int i, float t) {
+	float Lderiv(unsigned int i, float t) const {
 		float sum = 0.0f;
 		for(unsigned int j = 0; j < cps.size(); ++j) {
 			if(j == i) continue;
@@ -464,7 +482,7 @@ class LagrangeCurve : protected LineStrip {
 	}
 
 public:
-	vec4 r(float t) {
+	vec4 r(float t) const {
 		// EPSILON is needed to make a difference between the first and the last point even after fmod
 		// EPSILON is a very small positive number
 		t = fmod(t, lastRelativeTime + EPSILON);
@@ -475,7 +493,7 @@ public:
 		return rr;
 	}
 
-	float direction(float t) {
+	float direction(float t) const {
 		t = fmod(t, lastRelativeTime + EPSILON);
 		vec4 rr(0,0,0);
 		for(unsigned int i = 0; i < cps.size(); ++i) {
@@ -507,7 +525,7 @@ public:
 		LineStrip::Create();
 	}
 
-	void Draw() {
+	void Draw() const {
 		LineStrip::Draw();
 	}
 
@@ -543,21 +561,32 @@ class BezierField {
 	std::vector<vec4> cps;
 	std::vector<float> vertexData;
 
-	void CopyVertexDataToGPU() {
+	void CopyVertexDataToGPU() const {
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 		glBufferData(GL_ARRAY_BUFFER, vertexData.size() * sizeof(float), vertexData.data(), GL_STATIC_DRAW);
 	}
 
-	float B(int i, float t) {
+	float getBBinom(int i) const {
 		int n = CONTROL_POINTS_WIDTH + 1;
 		float choose = 1.0f;
 		for(int j = 1; j <= i; ++j) {
 			choose += static_cast<float>(n-j+1) / j;
 		}
-		return choose * pow(t, i) * pow(1 - t, n - i);
+		return choose;
 	}
 
-	float getHeight(float x, float y) {
+	float B(int i, float t) const {
+		int n = CONTROL_POINTS_WIDTH + 1;
+		return getBBinom(i) * pow(t, i) * pow(1 - t, n - i);
+	}
+
+	float Bderiv(int i, float t) const {
+		int n = CONTROL_POINTS_WIDTH + 1;
+		float BBinom = getBBinom(i);
+		return BBinom * (i * pow(t, i - 1) * pow(1 - t, n - i) + pow(t, i) * (n - i) + pow(1 - t, n - i - 1));
+	}
+
+	float getHeight(float x, float y) const {
 		float height = 0.0f;
 		for(unsigned int v = 0; v <= CONTROL_POINTS_WIDTH; ++v) {
 			for(unsigned int u = 0; u <= CONTROL_POINTS_WIDTH; ++u) {
@@ -565,19 +594,26 @@ class BezierField {
 			}
 		}
 		return height;
-
-
-		x = -1.0f * PI + 2.0f * PI * x;
-		y = -1.0f * PI + 2.0f * PI * y;
-		return 0.25f * (cos(x) + cos(y)) + 0.5f;
 	}
 
-	vec4 getColorByLevel(float height) {
+	vec4 getGradient(float x, float y) const {
+		vec4 result;
+		for(unsigned int v = 0; v <= CONTROL_POINTS_WIDTH; ++v) {
+			for(unsigned int u = 0; u <= CONTROL_POINTS_WIDTH; ++u) {
+				result[0] += Bderiv(u, x) * B(v, y) * CONTROL_POINTS[v * (CONTROL_POINTS_WIDTH + 1) + u];
+				result[1] += B(u, x) * Bderiv(v, y) * CONTROL_POINTS[v * (CONTROL_POINTS_WIDTH + 1) + u];
+			}
+		}
+
+		return result;
+	}
+
+	vec4 getColorByLevel(float height) const {
 		if(height < 0.0f) height = 0.0f;
 		if(height > 1.0f) height = 1.0f;
 		//return vec4(height, height, height);
 		vec4 lowcolor(0.2f, 0.6f, 0.0f);
-		vec4 midcolor(0.9f, 0.65f, 0.0f);
+		vec4 midcolor(0.9f, 0.55f, 0.0f);
 		vec4 hicolor(0.03f, 0.02f, 0.00f);
 		if(height <= 0.5f) {
 			height *= 2.0f;
@@ -668,7 +704,7 @@ public:
 		tesselate();
 	}
 
-	void Draw() {
+	void Draw() const {
 		mat4 scale = {
 			 2.0f,  0.0f,  0.0f,  0.0f,
 			 0.0f,  2.0f,  0.0f,  0.0f,
@@ -692,20 +728,24 @@ public:
 		glDrawArrays(GL_TRIANGLES, 0, vertexData.size() / ELEMENTS_PER_VERTEX);
 	}
 
+	float getDirectionalDerivative(vec4 position, vec4 direction) const {
+		return fabs(atan(dot(getGradient(position[0], position[1]), direction)) / 2 + PI / 2);
+	}
 };
 constexpr const float BezierField::CONTROL_POINTS[25];
 
 class Bicycle {
 	static const unsigned int ELEMENTS_PER_VERTEX = 5;
 	LagrangeCurve *curve;
+	BezierField *field;
 	float vertexData[ELEMENTS_PER_VERTEX * 4];
 	GLuint vao, vbo;
 	float translation[2];
 	float rotation;
-
+	float sy;
 public:
-	Bicycle(LagrangeCurve *curve) 
-		:curve(curve), translation{0.0f, 0.0f}, rotation(0.0f)
+	Bicycle(LagrangeCurve *curve, BezierField *field) 
+		:curve(curve), field(field), translation{0.0f, 0.0f}, rotation(0.0f), sy(0)
 	{ }
 
 	void Create() {
@@ -754,18 +794,20 @@ public:
 		vec4 pos = curve->r(t);
 		translation[0] = pos[0]; // 4 * cosf(t / 2);
 		translation[1] = pos[1]; // 4 * sinf(t / 2);
-		rotation = curve->direction(t);
+		float rotation = curve->direction(t);
+		this->rotation = rotation;
+		sy = 1.0f / field->getDirectionalDerivative(pos, rotation);
 	}
 
-	void Draw() {
+	void Draw() const {
 		using std::sin;
 		using std::cos;
 		constexpr float scale = 0.1f;
 
-		constexpr mat4 Mscale( scale,  0.0f,  0.0f, 0.0f,
-		                        0.0f, scale,  0.0f, 0.0f,
-		                        0.0f,  0.0f, scale, 0.0f,
-		                        0.0f,  0.0f,  0.0f, 1.0f);
+		mat4 Mscale( scale,       0.0f,  0.0f, 0.0f,
+		              0.0f, sy * scale,  0.0f, 0.0f,
+		              0.0f,       0.0f, scale, 0.0f,
+		              0.0f,       0.0f,  0.0f, 1.0f);
 
 		mat4 Mtranslate(          1.0f,           0.0f, 0.0f, 0.0f,
 		                          0.0f,           1.0f, 0.0f, 0.0f,
@@ -791,7 +833,7 @@ public:
 // The virtual world: collection of two objects
 LagrangeCurve lagrangeCurve;
 BezierField field;
-Bicycle bicycle(&lagrangeCurve);
+Bicycle bicycle(&lagrangeCurve, &field);
 
 
 
