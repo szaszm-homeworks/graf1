@@ -249,6 +249,25 @@ struct vec4 {
 		return vec4(*this) /= f;
 	}
 
+	vec4 &normalize() {
+		if(fabs(v[3] - 1.0f) > EPSILON) {
+			for(int i = 0; i < 3; ++i) {
+				v[i] /= v[3];
+			}
+			v[3] = 1.0f;
+		}
+
+		float len = sqrt(pow(v[0], 2) + pow(v[1], 2) + pow(v[2], 2));
+
+		for(int i = 0; i < 3; ++i) {
+			v[i] /= len;
+		}
+		return *this;
+	}
+
+	vec4 getNormalized() const {
+		return vec4(*this).normalize();
+	}
 };
 
 float dot(const vec4 &v, const vec4 &w) {
@@ -560,11 +579,11 @@ public:
 
 class BezierField {
 	constexpr static const float CONTROL_POINTS[25] = {
-		0.5f, 1.0f, 0.5f, 0.0f, 0.0f,
-		1.0f, 2.0f, 1.0f, 0.5f, 0.0f,
-		0.5f, 1.0f, 1.5f, 2.0f, 1.5f,
-		0.0f, 0.0f, 2.0f, 3.0f, 2.0f,
-		0.0f, 0.0f, 1.5f, 2.0f, 1.5f
+		0.2f, 0.4f, 0.2f, 0.0f, 0.0f,
+		0.4f, 0.8f, 0.4f, 0.2f, 0.0f,
+		0.2f, 0.4f, 0.6f, 0.8f, 0.6f,
+		0.0f, 0.0f, 0.8f, 1.0f, 0.8f,
+		0.0f, 0.0f, 0.6f, 0.8f, 0.6f
 	};
 	static const unsigned int CONTROL_POINTS_WIDTH = 4;
 
@@ -667,7 +686,7 @@ class BezierField {
 				float v = i * step;
 				float u = j * step;
 				float height = getHeight(u, v);
-				vec4 color = getColorByLevel(height / 1.5f);
+				vec4 color = getColorByLevel(height);
 				float x = u;
 				float y = v;
 				tempVertexData.push_back(x);
@@ -766,9 +785,12 @@ class Bicycle {
 	float rotation;
 	float sy;
 	float verticalAngle;
+	bool started;
+	float startTime;
+
 public:
 	Bicycle(const LagrangeCurve *curve, const BezierField *field) 
-		:curve(curve), field(field), translation { 0.0f, 0.0f }
+		:curve(curve), field(field), translation { 0.0f, 0.0f }, started(false)
 	{ }
 
 	void Create() {
@@ -814,10 +836,12 @@ public:
 	}
 
 	void Animate(float t) {
-		vec4 pos = curve->r(t);
+		if(!started) return;
+
+		vec4 pos = curve->r(t - startTime);
 		translation[0] = pos[0]; // 4 * cosf(t / 2);
 		translation[1] = pos[1]; // 4 * sinf(t / 2);
-		vec4 direction = curve->direction(t);
+		vec4 direction = curve->direction(t - startTime).normalize();
 		this->rotation = atan2(direction[0], direction[1]);;
 		verticalAngle = atan(field->getDirectionalDerivative(pos, direction));
 		sy = sin(verticalAngle + PI / 2.0f);
@@ -826,6 +850,9 @@ public:
 	void Draw() const {
 		using std::sin;
 		using std::cos;
+
+		if(!started) return;
+
 		constexpr float scale = 0.1f;
 
 		mat4 Mscale( scale,       0.0f,  0.0f, 0.0f,
@@ -855,6 +882,11 @@ public:
 
 	float getVerticalAngle() const {
 		return verticalAngle;
+	}
+
+	void start() {
+		started = true;
+		startTime = static_cast<float>(glutGet(GLUT_ELAPSED_TIME)) / 1000.0f;
 	}
 };
 
@@ -891,6 +923,7 @@ public:
 	}
 
 	void Draw() {
+		float height = fabs(tan(verticalAngle));
 		if(verticalAngle < 0) {
 			vertexData[0] = 0.0f; // x
 			vertexData[1] = 0.0f; // y
@@ -898,11 +931,11 @@ public:
 			vertexData[3] = 1.0f; // g
 			vertexData[4] = 1.0f; // b
 
-			vertexData[5] = 0.0f; // x
-			vertexData[6] = 1.0f; // y
-			vertexData[7] = 0.0f; // r
-			vertexData[8] = 1.0f; // g
-			vertexData[9] = 1.0f; // b
+			vertexData[5] =   0.0f; // x
+			vertexData[6] = height; // y
+			vertexData[7] =   0.0f; // r
+			vertexData[8] =   1.0f; // g
+			vertexData[9] =   1.0f; // b
 
 			vertexData[10] = 1.0f; // x
 			vertexData[11] = 0.0f; // y
@@ -916,11 +949,11 @@ public:
 			vertexData[3] = 1.0f; // g
 			vertexData[4] = 1.0f; // b
 
-			vertexData[5] = 1.0f; // x
-			vertexData[6] = 1.0f; // y
-			vertexData[7] = 0.0f; // r
-			vertexData[8] = 1.0f; // g
-			vertexData[9] = 1.0f; // b
+			vertexData[5] =   1.0f; // x
+			vertexData[6] = height; // y
+			vertexData[7] =   0.0f; // r
+			vertexData[8] =   1.0f; // g
+			vertexData[9] =   1.0f; // b
 
 			vertexData[10] = 1.0f; // x
 			vertexData[11] = 0.0f; // y
@@ -1035,6 +1068,9 @@ void onKeyboard(unsigned char key, int /*pX*/, int /*pY*/) {
 	if (key == 'd') glutPostRedisplay();         // if d, invalidate display, i.e. redraw
 	if (key == 'q' || key == 27) {
 		glutLeaveMainLoop();
+	}
+	if(key == ' ') {
+		bicycle.start();
 	}
 }
 
