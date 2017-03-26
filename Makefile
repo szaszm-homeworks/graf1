@@ -1,6 +1,6 @@
 LIBS=-lGL -lGLU -lglut -lGLEW
 CFLAGS=-g -O0 -Wall -Wextra
-CXXFLAGS=-std=c++11
+CXXFLAGS=-std=c++11 -pedantic
 LDFLAGS=
 
 run: grafhazi

@@ -72,7 +72,7 @@ void getErrorInfo(unsigned int handle) {
 		int written;
 		glGetShaderInfoLog(handle, logLen, &written, log);
 		printf("Shader log:\n%s", log);
-		delete log;
+		delete[] log;
 	}
 }
 
@@ -141,10 +141,10 @@ public:
 	               float m10, float m11, float m12, float m13,
 	               float m20, float m21, float m22, float m23,
 	               float m30, float m31, float m32, float m33) 
-		:m { m00, m01, m02, m03,
-		     m10, m11, m12, m13,
-		     m20, m21, m22, m23,
-		     m30, m31, m32, m33 }
+		:m { { m00, m01, m02, m03 },
+		     { m10, m11, m12, m13 },
+		     { m20, m21, m22, m23 },
+		     { m30, m31, m32, m33 } }
 	{ }
 
 	mat4(const mat4 &m) :mat4(m[0][0], m[0][1], m[0][2], m[0][3],
@@ -837,8 +837,7 @@ public:
 	}
 
 	void Draw() const {
-		using std::sin;
-		using std::cos;
+		using namespace std;
 
 		if(!started) return;
 
@@ -854,10 +853,10 @@ public:
 		                          0.0f,           0.0f, 1.0f, 0.0f,
 		                translation[0], translation[1], 0.0f, 1.0f);
 
-		mat4 Mrotate( cos(rotation), -sin(rotation), 0.0f, 0.0f,
-		              sin(rotation),  cos(rotation), 0.0f, 0.0f,
-		                       0.0f,           0.0f, 1.0f, 0.0f,
-		                       0.0f,           0.0f, 0.0f, 1.0f);
+		mat4 Mrotate( cosf(rotation), -sinf(rotation), 0.0f, 0.0f,
+		              sinf(rotation),  cosf(rotation), 0.0f, 0.0f,
+		                        0.0f,            0.0f, 1.0f, 0.0f,
+		                        0.0f,            0.0f, 0.0f, 1.0f);
 
 		mat4 VPTransform = Mscale * Mrotate * Mtranslate * camera.V() * camera.P();
 
