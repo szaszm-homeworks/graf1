@@ -57,7 +57,7 @@ const unsigned int windowWidth = 600, windowHeight = 600;
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // You are supposed to modify the code from here...
 
-const float EPSILON = 0.01f;
+const float EPSILON = 0.000001;
 
 // OpenGL major and minor versions
 int majorVersion = 3, minorVersion = 3;
