@@ -474,107 +474,6 @@ public:
 	virtual ~LineStrip() {}
 };
 
-class LagrangeCurve : protected LineStrip {
-	static const int RESOLUTION = 100;
-	std::vector<vec4> cps;
-	std::vector<float> ts;
-	float lastAbsoluteTime = -1.0f;
-	float lastRelativeTime = -1.0f; // ~= lastAbsoluteTime - firstAbsoluteTime
-	float firstAbsoluteTime = -1.0f;
-
-	float L(unsigned int i, float t) const {
-		float Li = 1.0f;
-		for(unsigned int j = 0; j < cps.size(); ++j) {
-			if(j == i) continue;
-			Li *= (t - ts[j]) / (ts[i] - ts[j]);
-		}
-		return Li;
-	}
-
-	float Lderiv(unsigned int i, float t) const {
-		float sum = 0.0f;
-		for(unsigned int j = 0; j < cps.size(); ++j) {
-			if(j == i) continue;
-			sum += 1.0f / (t - ts[j]);
-		}
-		return sum * L(i, t);
-	}
-
-
-	void tesselate() {
-		vertexData.clear();
-
-		float step = lastRelativeTime / static_cast<float>(RESOLUTION);
-		for(unsigned i = 0; i <= RESOLUTION; ++i) {
-			float t = step * i;
-			vec4 point = r(t);
-			AddPoint(point[0], point[1]);
-		}
-
-		CopyVertexDataToGPU();
-	}
-
-public:
-	vec4 r(float t) const {
-		// EPSILON is needed to make a difference between the first and the last point even after fmod
-		// EPSILON is a very small positive number
-		t = fmod(t, lastRelativeTime + EPSILON);
-		vec4 rr(0,0,0);
-		for(unsigned int i = 0; i < cps.size(); ++i) {
-			rr += cps[i] * L(i, t);
-		}
-		return rr;
-	}
-
-	vec4 direction(float t) const {
-		if(lastRelativeTime == -1) return vec4();
-		t = fmod(t, lastRelativeTime + EPSILON);
-		vec4 rr(0,0,0);
-		for(unsigned int i = 0; i < cps.size(); ++i) {
-			rr += cps[i] * Lderiv(i, t);
-		}
-		return rr;
-	}
-
-	void AddControlPoint(vec4 cp) {
-		float currentAbsoluteTime = glutGet(GLUT_ELAPSED_TIME) / 1000.0f;
-		if(fabs(lastAbsoluteTime + 1.0f) <= EPSILON) {
-			firstAbsoluteTime = lastAbsoluteTime = currentAbsoluteTime;
-			lastRelativeTime = 0.0f;
-		}
-		float timeDelta = currentAbsoluteTime - lastAbsoluteTime;
-		lastRelativeTime += timeDelta;
-		lastAbsoluteTime = currentAbsoluteTime;
-		ts.push_back(lastRelativeTime);
-		cps.push_back(cp);
-
-		if(cps.size() > 1) tesselate();
-
-		printf("LagrangeCurve length: %f km\n", getLength() / 2.0f);
-		fflush(stdout);
-	}
-
-
-	void Create() {
-		LineStrip::Create();
-	}
-
-	void Draw() const {
-		LineStrip::Draw();
-	}
-
-	float getLength() const {
-		float length = 0.0f;
-		for(unsigned int i = 1; i < vertexData.size() / ELEMENTS_PER_VERTEX; ++i) {
-			float curx = vertexData[i * ELEMENTS_PER_VERTEX];
-			float cury = vertexData[i * ELEMENTS_PER_VERTEX + 1];
-			float lastx = vertexData[(i - 1) * ELEMENTS_PER_VERTEX];
-			float lasty = vertexData[(i - 1) * ELEMENTS_PER_VERTEX + 1];
-			length += sqrt(pow(curx - lastx, 2.0f) + pow(cury - lasty, 2.0f));
-		}
-		return length;
-	}
-};
 
 
 class BezierField {
@@ -620,15 +519,6 @@ class BezierField {
 		return BBinom * (pow(t, i - 1) * pow(1 - t, n - i) * i - pow(t, i) * (n - i) * pow(1 - t, n - i - 1));
 	}
 
-	float getHeight(float x, float y) const {
-		float height = 0.0f;
-		for(unsigned int v = 0; v <= CONTROL_POINTS_WIDTH; ++v) {
-			for(unsigned int u = 0; u <= CONTROL_POINTS_WIDTH; ++u) {
-				height += B(u, x) * B(v, y) * CONTROL_POINTS[v * (CONTROL_POINTS_WIDTH + 1) + u];
-			}
-		}
-		return height;
-	}
 
 	vec4 getGradient(float x, float y) const {
 		vec4 result;
@@ -720,6 +610,15 @@ class BezierField {
 
 
 public:
+	float getHeight(float x, float y) const {
+		float height = 0.0f;
+		for(unsigned int v = 0; v <= CONTROL_POINTS_WIDTH; ++v) {
+			for(unsigned int u = 0; u <= CONTROL_POINTS_WIDTH; ++u) {
+				height += B(u, x) * B(v, y) * CONTROL_POINTS[v * (CONTROL_POINTS_WIDTH + 1) + u];
+			}
+		}
+		return height;
+	}
 
 	void Create() {
 		glGenVertexArrays(1, &vao);
@@ -773,6 +672,112 @@ public:
 
 constexpr const float BezierField::CONTROL_POINTS[25];
 
+class LagrangeCurve : protected LineStrip {
+	static const int RESOLUTION = 100;
+	std::vector<vec4> cps;
+	std::vector<float> ts;
+	float lastAbsoluteTime = -1.0f;
+	float lastRelativeTime = -1.0f; // ~= lastAbsoluteTime - firstAbsoluteTime
+	float firstAbsoluteTime = -1.0f;
+	const BezierField *field;
+
+	float L(unsigned int i, float t) const {
+		float Li = 1.0f;
+		for(unsigned int j = 0; j < cps.size(); ++j) {
+			if(j == i) continue;
+			Li *= (t - ts[j]) / (ts[i] - ts[j]);
+		}
+		return Li;
+	}
+
+	float Lderiv(unsigned int i, float t) const {
+		float sum = 0.0f;
+		for(unsigned int j = 0; j < cps.size(); ++j) {
+			if(j == i) continue;
+			sum += 1.0f / (t - ts[j]);
+		}
+		return sum * L(i, t);
+	}
+
+
+	void tesselate() {
+		vertexData.clear();
+
+		float step = lastRelativeTime / static_cast<float>(RESOLUTION);
+		for(unsigned i = 0; i <= RESOLUTION; ++i) {
+			float t = step * i;
+			vec4 point = r(t);
+			AddPoint(point[0], point[1]);
+		}
+
+		CopyVertexDataToGPU();
+	}
+
+public:
+	LagrangeCurve(const BezierField *field) :field(field) { }
+
+	vec4 r(float t) const {
+		// EPSILON is needed to make a difference between the first and the last point even after fmod
+		// EPSILON is a very small positive number
+		t = fmod(t, lastRelativeTime + EPSILON);
+		vec4 rr(0,0,0);
+		for(unsigned int i = 0; i < cps.size(); ++i) {
+			rr += cps[i] * L(i, t);
+		}
+		return rr;
+	}
+
+	vec4 direction(float t) const {
+		if(lastRelativeTime == -1) return vec4();
+		t = fmod(t, lastRelativeTime + EPSILON);
+		vec4 rr(0,0,0);
+		for(unsigned int i = 0; i < cps.size(); ++i) {
+			rr += cps[i] * Lderiv(i, t);
+		}
+		return rr;
+	}
+
+	void AddControlPoint(vec4 cp) {
+		float currentAbsoluteTime = glutGet(GLUT_ELAPSED_TIME) / 1000.0f;
+		if(fabs(lastAbsoluteTime + 1.0f) <= EPSILON) {
+			firstAbsoluteTime = lastAbsoluteTime = currentAbsoluteTime;
+			lastRelativeTime = 0.0f;
+		}
+		float timeDelta = currentAbsoluteTime - lastAbsoluteTime;
+		lastRelativeTime += timeDelta;
+		lastAbsoluteTime = currentAbsoluteTime;
+		ts.push_back(lastRelativeTime);
+		cps.push_back(cp);
+
+		if(cps.size() > 1) tesselate();
+
+		printf("LagrangeCurve length: %f km\n", getLength() / 2.0f);
+		fflush(stdout);
+	}
+
+
+	void Create() {
+		LineStrip::Create();
+	}
+
+	void Draw() const {
+		LineStrip::Draw();
+	}
+
+	float getLength() const {
+		float length = 0.0f;
+		for(unsigned int i = 1; i < vertexData.size() / ELEMENTS_PER_VERTEX; ++i) {
+			float curx = vertexData[i * ELEMENTS_PER_VERTEX];
+			float cury = vertexData[i * ELEMENTS_PER_VERTEX + 1];
+			float curz = field->getHeight(0.5f * curx + 0.5f, 0.5f * cury + 0.5f);
+			float lastx = vertexData[(i - 1) * ELEMENTS_PER_VERTEX];
+			float lasty = vertexData[(i - 1) * ELEMENTS_PER_VERTEX + 1];
+			float lastz = field->getHeight(0.5f * lastx + 0.5f, 0.5f * lasty + 0.5f);
+			length += sqrt(pow(curx - lastx, 2.0f) + pow(cury - lasty, 2.0f) + pow(curz - lastz, 2.0f));
+		}
+		return length;
+	}
+};
 
 
 class Bicycle {
@@ -991,8 +996,8 @@ public:
 
 
 // The virtual world: collection of two objects
-LagrangeCurve lagrangeCurve;
 BezierField field;
+LagrangeCurve lagrangeCurve(&field);
 Bicycle bicycle(&lagrangeCurve, &field);
 DerivativeTriangle dTriangle(&bicycle);
 
@@ -1066,9 +1071,6 @@ void onDisplay() {
 // Key of ASCII code pressed
 void onKeyboard(unsigned char key, int /*pX*/, int /*pY*/) {
 	if (key == 'd') glutPostRedisplay();         // if d, invalidate display, i.e. redraw
-	if (key == 'q' || key == 27) {
-		glutLeaveMainLoop();
-	}
 	if(key == ' ') {
 		bicycle.start();
 	}
