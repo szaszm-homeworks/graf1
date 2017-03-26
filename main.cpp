@@ -503,7 +503,7 @@ class BezierField {
 		int n = CONTROL_POINTS_WIDTH;
 		float choose = 1.0f;
 		for(int j = 1; j <= i; ++j) {
-			choose += static_cast<float>(n-j+1) / j;
+			choose *= static_cast<float>(n-j+1) / j;
 		}
 		return choose;
 	}
