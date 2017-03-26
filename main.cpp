@@ -514,7 +514,7 @@ class BezierField {
 	}
 
 	float Bderiv(int i, float t) const {
-		int n = CONTROL_POINTS_WIDTH + 1;
+		int n = CONTROL_POINTS_WIDTH;
 		float BBinom = getBBinom(i);
 		return BBinom * (pow(t, i - 1) * pow(1 - t, n - i) * i - pow(t, i) * (n - i) * pow(1 - t, n - i - 1));
 	}
