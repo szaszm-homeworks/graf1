@@ -477,14 +477,13 @@ public:
 
 
 class BezierField {
-	constexpr static const float CONTROL_POINTS[25] = {
-		0.2f, 0.4f, 0.2f, 0.0f, 0.0f,
-		0.4f, 0.8f, 0.4f, 0.2f, 0.0f,
-		0.2f, 0.4f, 0.6f, 0.8f, 0.6f,
-		0.0f, 0.0f, 0.8f, 1.0f, 0.8f,
-		0.0f, 0.0f, 0.6f, 0.8f, 0.6f
+	constexpr static const float CONTROL_POINTS[16] = {
+		0.2f, 0.0f, 0.0f, 0.0f,
+		0.0f, 0.8f, 0.0f, 0.0f,
+		0.0f, 0.0f, 1.0f, 0.3f,
+		0.0f, 0.0f, 0.3f, 0.0f,
 	};
-	static const unsigned int CONTROL_POINTS_WIDTH = 4;
+	static const unsigned int CONTROL_POINTS_WIDTH = 3;
 
 	static const unsigned int GRID_RESOLUTION = 20;
 	static const unsigned int ELEMENTS_PER_VERTEX = 5;
@@ -493,6 +492,7 @@ class BezierField {
 	GLuint vao, vbo;
 	std::vector<vec4> cps;
 	std::vector<float> vertexData;
+	float minHeight, maxHeight;
 
 	void CopyVertexDataToGPU() const {
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
@@ -500,7 +500,7 @@ class BezierField {
 	}
 
 	float getBBinom(int i) const {
-		int n = CONTROL_POINTS_WIDTH + 1;
+		int n = CONTROL_POINTS_WIDTH;
 		float choose = 1.0f;
 		for(int j = 1; j <= i; ++j) {
 			choose += static_cast<float>(n-j+1) / j;
@@ -509,7 +509,7 @@ class BezierField {
 	}
 
 	float B(int i, float t) const {
-		int n = CONTROL_POINTS_WIDTH + 1;
+		int n = CONTROL_POINTS_WIDTH;
 		return getBBinom(i) * pow(t, i) * pow(1 - t, n - i);
 	}
 
@@ -533,59 +533,43 @@ class BezierField {
 	}
 
 	vec4 getColorByLevel(float height) const {
-		if(height < 0.0f) height = 0.0f;
-		if(height > 1.0f) height = 1.0f;
-		//return vec4(height, height, height);
-		vec4 lowcolor(0.2f, 0.6f, 0.0f);
-		vec4 midcolor(0.9f, 0.55f, 0.0f);
-		vec4 hicolor(0.03f, 0.02f, 0.00f);
-		if(height <= 0.5f) {
-			height *= 2.0f;
-			return height * midcolor + (1.0f - height) * lowcolor;
-		} else {
-			height -= 0.5f;
-			height *= 2.0f;
-			return height * hicolor + (1.0f - height) * midcolor;
-		}
-
-		float r, g, b;
-
-		if(height <= 0.25f) {
-			r = height * 4.0f;
-			g = 1.0f;
-			b = 0.66f * height;
-		} else if(height <= 0.5f) {
-			r = 1.0f;
-			g = 0.66f + 0.34f * (2.0f + height * -2.0f);
-			b = 0.66f * height;;
-		} else {
-			r = 1.0f - (height - 0.5f) * 2.0f;
-			g = r * 0.66f;
-			b = r * 0.33f;
-		}
-		return vec4(r,g,b);
+		float r = 1.0f - pow(2.0f * height - 1.0f, 2.0f) * 0.8f;
+		float g = (1.0f - height * 0.92f) * 0.8f;
+		return vec4(r, g, 0.0f);
 	}
 
 	void tesselate() {
 		vertexData.clear();
-		std::vector<float> tempVertexData;
+		float tempVertexData[(GRID_RESOLUTION + 1) * (GRID_RESOLUTION + 1) * ELEMENTS_PER_VERTEX];
 		std::vector<unsigned int> tempIndexData;
 		float step = 1.0f / GRID_RESOLUTION;
+
+		minHeight = maxHeight = getHeight(0.0f, 0.0f);
 		for(unsigned int i = 0; i <= GRID_RESOLUTION; ++i) {
 			for(unsigned int j = 0; j <= GRID_RESOLUTION; ++j) {
 				float v = i * step;
 				float u = j * step;
 				float height = getHeight(u, v);
-				vec4 color = getColorByLevel(height);
 				float x = u;
 				float y = v;
-				tempVertexData.push_back(x);
-				tempVertexData.push_back(y);
-				tempVertexData.push_back(color[0]); // r
-				tempVertexData.push_back(color[1]); // g
-				tempVertexData.push_back(color[2]); // b
+				tempVertexData[(i * (GRID_RESOLUTION + 1) + j) * ELEMENTS_PER_VERTEX] = x;
+				tempVertexData[(i * (GRID_RESOLUTION + 1) + j) * ELEMENTS_PER_VERTEX + 1] = y;
+				tempVertexData[(i * (GRID_RESOLUTION + 1) + j) * ELEMENTS_PER_VERTEX + 2] = height; // temporary
+				if(height < minHeight) minHeight = height;
+				if(height > maxHeight) maxHeight = height;
 			}
 		}
+
+		for(unsigned int i = 0; i <= GRID_RESOLUTION; ++i) {
+			for(unsigned int j = 0; j <= GRID_RESOLUTION; ++j) {
+				float height = tempVertexData[(i * (GRID_RESOLUTION + 1) + j) * ELEMENTS_PER_VERTEX + 2];
+				vec4 color = getColorByLevel((height - minHeight) / (maxHeight - minHeight));
+				tempVertexData[(i * (GRID_RESOLUTION + 1) + j) * ELEMENTS_PER_VERTEX + 2] = color[0];
+				tempVertexData[(i * (GRID_RESOLUTION + 1) + j) * ELEMENTS_PER_VERTEX + 3] = color[1];
+				tempVertexData[(i * (GRID_RESOLUTION + 1) + j) * ELEMENTS_PER_VERTEX + 4] = color[2];
+			}
+		}
+
 
 		for(unsigned int v = 0; v < GRID_RESOLUTION; ++v) {
 			for(unsigned int u = 0; u < GRID_RESOLUTION; ++u) {
@@ -670,7 +654,7 @@ public:
 	}
 };
 
-constexpr const float BezierField::CONTROL_POINTS[25];
+constexpr const float BezierField::CONTROL_POINTS[16];
 
 class LagrangeCurve : protected LineStrip {
 	static const int RESOLUTION = 100;
